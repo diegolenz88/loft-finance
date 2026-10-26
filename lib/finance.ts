@@ -2,7 +2,7 @@ export type Partner = {id:string;name:string;email:string;active:boolean;joined:
 export type Shares = Record<string,number>;
 export type Rule = {id:string;from:string;ownership:Shares;cost:Shares;revenue:Shares;base:'net'|'gross';reserve:number};
 export type Config = {name:string;currency:string;partners:Partner[];units:string[];inactiveUnits?:string[];categories:string[];stages:string[];accounts:string[];rules:Rule[];budgets:{id:string;category:string;stage:string;amount:number;description?:string}[];budgetUnits?:Shares};
-export type Entry = {id:string;kind:'expense'|'revenue';description:string;party:string;contactId?:string;budgetId?:string;document:string;category:string;stage:string;units:Shares;amount:number;fees:number;due:string;date:string;note:string;planned:boolean;cancelled:boolean;shares:Shares;ruleId:string;base:'net'|'gross';reserve:number;exception:string;attachments:{id:string;name:string}[];paymentPlan?:{id:string;total:number;downPayment:number;installments:number;position:number;kind:'downPayment'|'installment'}};
+export type Entry = {id:string;kind:'expense'|'revenue';description:string;party:string;contactId?:string;budgetId?:string;document:string;category:string;stage:string;units:Shares;amount:number;fees:number;due:string;date:string;note:string;planned:boolean;cancelled:boolean;shares:Shares;ruleId:string;base:'net'|'gross';reserve:number;exception:string;attachments:{id:string;name:string}[];paymentPlan?:{id:string;total:number;paidBefore?:number;downPayment:number;installments:number;position:number;kind:'downPayment'|'installment'}};
 export type Movement = {id:string;type:string;date:string;amount:number;entry?:string;partner?:string;account?:string;to?:string;source?:string;origin?:string;fee?:number;reserve?:number;gross?:number;shares?:Shares;note:string;actor:string;at:string};
 export type Contact = {id:string;name:string;kind:'supplier'|'customer'|'both';document:string;email:string;phone:string;note:string;active:boolean;createdAt:string;updatedAt:string};
 export type Ledger = {contacts?:Contact[];config:Config;entries:Entry[];moves:Movement[];audit:{id:string;at:string;actor:string;action:string;description:string}[]};
@@ -107,25 +107,39 @@ export function apply(s0:Ledger,action:any,actor:string,admin=true):Ledger{const
   const {expense,installments,downPayment=0,downPaymentDue,replace}=action.data||{};
   ensure(expense?.kind==='expense','Apenas despesas podem ser parceladas.');
   // Two modes: create a new installment plan, or convert an existing expense.
-  // Conversion is only safe before any settlement, and the original is
-  // cancelled instead of removed so the history stays traceable.
+  // A partially paid expense keeps its paid part as a settled entry and only
+  // the remaining balance is scheduled, so payments keep their original link.
   const original=replace?s.entries.find(e=>e.id===replace):undefined;
+  let paidBefore=0;
   if(replace){
    ensure(original,'Lançamento não encontrado.');
    ensure(!original!.cancelled,'Lançamento cancelado não pode ser parcelado.');
    ensure(!original!.paymentPlan,'Este lançamento já faz parte de um parcelamento.');
-   ensure(paid(s,original!)===0,'Estorne as baixas antes de parcelar a despesa.');
+   paidBefore=paid(s,original!);
+   ensure(paidBefore<expense.amount,`O valor informado (${money(expense.amount)}) não cobre o total já pago (${money(paidBefore)}).`);
   } else ensure(!expense.id,'O parcelamento deve ser criado como uma nova despesa.');
-  const schedule=paymentSchedule(expense.amount,installments,expense.due,downPayment,downPaymentDue);let result=s;
-  const carried=original?(original.attachments||[]).slice():[];
-  if(original)original.cancelled=true;
+  const remaining=expense.amount-paidBefore;
+  const schedule=paymentSchedule(remaining,installments,expense.due,downPayment,downPaymentDue);let result=s;
+  // Receipts of an unpaid purchase follow the plan; when part was already
+  // paid, they stay with the original entry that documents that payment.
+  const carried=original&&paidBefore===0?(original.attachments||[]).slice():[];
+  let replaced='';
+  if(original){
+   if(paidBefore===0){original.cancelled=true;replaced=original.description;}
+   else{
+    original.amount=paidBefore;
+    const suffix=' · parte paga';
+    replaced=original.description;
+    if(!original.description.endsWith(suffix)&&original.description.length+suffix.length<=300)original.description+=suffix;
+   }
+  }
   for(const row of schedule){const suffix=row.kind==='downPayment'?'Entrada':`Parcela ${row.position}/${installments}`;const entryId=action.id+':'+row.position;
    result=apply(result,{id:entryId,type:'entry',data:{...expense,id:undefined,amount:row.amount,fees:0,due:row.due,description:expense.description+' · '+suffix}},actor,admin);
-   result.entries[result.entries.length-1].paymentPlan={id:action.id,total:expense.amount,downPayment,installments,position:row.position,kind:row.kind};
+   result.entries[result.entries.length-1].paymentPlan={id:action.id,total:remaining,paidBefore,downPayment,installments,position:row.position,kind:row.kind};
   }
   // Receipts belong to the purchase, so they follow the first row of the plan.
   if(carried.length){const first=result.entries.find(e=>e.id===action.id+':'+schedule[0].position);if(first)first.attachments=carried;}
-  result.audit.unshift({id:action.id,at:new Date().toISOString(),actor,action:'expense_plan',description:`Despesa parcelada: ${expense.description} · ${downPayment>0?'entrada + ':''}${installments} parcela(s) · ${money(expense.amount)}`+(original?` · substituiu ${original.description}`:'')});return result;
+  result.audit.unshift({id:action.id,at:new Date().toISOString(),actor,action:'expense_plan',description:`Despesa parcelada: ${expense.description} · ${downPayment>0?'entrada + ':''}${installments} parcela(s) · ${money(remaining)}`+(paidBefore>0?` · já pago ${money(paidBefore)}`:'')+(replaced?` · substituiu ${replaced}`:'')});return result;
  }
  if(action.type==='batch'){ensure(Array.isArray(action.data)&&action.data.length>0&&action.data.length<=36&&action.data.every((x:any)=>x.type==='entry'),'Parcelamento inválido.');let result=s;for(const item of action.data)result=apply(result,item,actor,admin);result.audit.unshift({id:action.id,at:new Date().toISOString(),actor,action:'batch',description:'Parcelamento criado: '+action.data.length+' parcelas'});return result;}const t=metrics(s);const a=action.type==='config'?{...action.data,inactiveUnits:action.data?.inactiveUnits??s.config.inactiveUnits}:action.data;let description='';
  if(action.type==='contact'){

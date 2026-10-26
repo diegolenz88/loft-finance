@@ -70,10 +70,39 @@ assert.equal(plainRows.reduce((total,row)=>total+row.amount,0),120000);
 const funded=apply(created,{id:'c1',type:'move',data:{type:'capital',partner:partnerA,account,date:'2026-01-05',amount:500000,note:'Aporte'}},'admin@test');
 const paidLedger=apply(funded,{id:'p1',type:'move',data:{type:'pay',entry:originalId,date:'2026-02-10',amount:20000,note:'Sinal',account,source:funded.moves[0].id}},'admin@test');
 assert.equal(paid(paidLedger,paidLedger.entries[0]),20000);
-assert.throws(()=>apply(paidLedger,{
+
+// Partial settlement: the paid part stays as a settled entry and only the
+// remaining balance becomes installments. Totals never double count.
+const partial=apply(paidLedger,{
  id:'plan-3',type:'expense_plan',
  data:{expense:{...paidLedger.entries[0]},installments:2,replace:originalId},
-},'admin@test'),/Estorne as baixas antes de parcelar/);
+},'admin@test');
+const keptOriginal=partial.entries.find(e=>e.id===originalId);
+assert.equal(keptOriginal.cancelled,false,'o original permanece ativo como parte paga');
+assert.equal(keptOriginal.amount,20000,'o original fica limitado ao valor já pago');
+assert.match(keptOriginal.description,/· parte paga$/);
+assert.equal(paid(partial,keptOriginal),20000,'as baixas continuam vinculadas ao original');
+const partialRows=partial.entries.filter(e=>e.paymentPlan?.id==='plan-3');
+assert.equal(partialRows.length,2);
+assert.equal(partialRows.reduce((total,row)=>total+row.amount,0),100000,'restante = 120000 - 20000');
+assert.equal(partialRows[0].paymentPlan.paidBefore,20000);
+assert.equal(partialRows[0].paymentPlan.total,100000);
+assert.equal(metrics(partial).contracted,120000,'contratado preservado: 20000 + 100000');
+assert.equal(metrics(partial).payable,100000);
+
+// Fully paid expenses have nothing left to schedule.
+const fullyPaid=apply(paidLedger,{id:'p2',type:'move',data:{type:'pay',entry:originalId,date:'2026-02-11',amount:100000,note:'Quitação',account,source:funded.moves[0].id}},'admin@test');
+assert.equal(paid(fullyPaid,fullyPaid.entries[0]),120000);
+assert.throws(()=>apply(fullyPaid,{
+ id:'plan-3b',type:'expense_plan',
+ data:{expense:{...fullyPaid.entries[0]},installments:2,replace:originalId},
+},'admin@test'),/não cobre o total já pago|não há saldo a parcelar/);
+
+// A new amount below the paid total is rejected instead of shrinking silently.
+assert.throws(()=>apply(paidLedger,{
+ id:'plan-3c',type:'expense_plan',
+ data:{expense:{...paidLedger.entries[0],amount:15000},installments:2,replace:originalId},
+},'admin@test'),/não cobre o total já pago/);
 
 // An installment of an existing plan cannot be converted again.
 assert.throws(()=>apply(converted,{
@@ -112,5 +141,27 @@ const replayed=apply(converted,{
  data:{expense:{...created.entries[0]},installments:3,downPayment:30000,downPaymentDue:'2026-02-10',replace:originalId},
 },'admin@test');
 assert.equal(replayed.entries.length,converted.entries.length);
+
+// Real-world case: R$ 112.000,00 contracted, R$ 70.000,00 already paid,
+// so R$ 42.000,00 becomes 6 installments.
+const bigLedger=apply(ledger,{id:'big-e1',type:'entry',data:{...expense({amount:11200000,due:'2026-06-10'}),id:undefined}},'admin@test');
+const bigId=bigLedger.entries[0].id;
+const bigFunded=apply(bigLedger,{id:'big-c1',type:'move',data:{type:'capital',partner:partnerA,account,date:'2026-01-05',amount:11200000,note:'Aporte'}},'admin@test');
+const bigPaid=apply(bigFunded,{id:'big-p1',type:'move',data:{type:'pay',entry:bigId,date:'2026-03-10',amount:7000000,note:'Parcela parcial',account,source:bigFunded.moves[0].id}},'admin@test');
+assert.equal(paid(bigPaid,bigPaid.entries[0]),7000000);
+
+const bigPlan=apply(bigPaid,{
+ id:'big-plan',type:'expense_plan',
+ data:{expense:{...bigPaid.entries[0]},installments:6,replace:bigId},
+},'admin@test');
+const bigOriginal=bigPlan.entries.find(e=>e.id===bigId);
+const bigRows=bigPlan.entries.filter(e=>e.paymentPlan?.id==='big-plan');
+assert.equal(bigOriginal.amount,7000000,'original fica com o valor pago');
+assert.equal(bigRows.length,6);
+assert.equal(bigRows.reduce((total,row)=>total+row.amount,0),4200000,'saldo de 42000 em 6 parcelas');
+assert.equal(bigRows[0].amount,700000,'6 x 700,00 sem resto');
+assert.equal(metrics(bigPlan).contracted,11200000,'contratado inalterado');
+assert.equal(metrics(bigPlan).payable,4200000,'a pagar = saldo restante');
+assert.equal(metrics(bigPlan).accounts[account],11200000-7000000,'caixa reflete apenas o pagamento efetivo');
 
 console.log('PASS: conversão de despesa em entrada + parcelas, vínculos de comprovante, restrições de baixa, plano existente e cancelamento.');
