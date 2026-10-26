@@ -202,4 +202,53 @@ const oddRows=oddPlan.entries.filter(e=>e.paymentPlan?.id==='odd-plan');
 assert.equal(oddRows.reduce((total,row)=>total+row.amount,0),100000,'soma exata');
 assert.deepEqual(oddRows.map(row=>row.amount),[33334,33333,33333],'resto vai para a primeira parcela');
 
+// Funding allocation: a plan can be tied to a contribution lot, so each
+// installment already records which resource is expected to settle it.
+const fundedLedger=apply(ledger,{id:'f-e1',type:'entry',data:{...expense({amount:7000000,due:'2026-11-10'}),id:undefined}},'admin@test');
+const fundedId=fundedLedger.entries[0].id;
+const withLot=apply(fundedLedger,{id:'f-c1',type:'move',data:{type:'capital',partner:partnerA,account,date:'2026-10-01',amount:7000000,note:'Aporte para a compra'}},'admin@test');
+const lotId=withLot.moves[0].id;
+
+const allocated=apply(withLot,{
+ id:'f-plan',type:'expense_plan',
+ data:{expense:{...withLot.entries[0]},installments:10,replace:fundedId,funding:lotId},
+},'admin@test');
+const allocatedRows=allocated.entries.filter(e=>e.paymentPlan?.id==='f-plan');
+assert.equal(allocatedRows.length,10);
+assert.ok(allocatedRows.every(row=>row.plannedSource===lotId),'todas as parcelas apontam para o aporte');
+assert.ok(allocatedRows.every(row=>row.paymentPlan.funding===lotId));
+assert.equal(allocated.moves.length,withLot.moves.length,'a alocação não cria pagamentos sozinha');
+assert.equal(metrics(allocated).lots[lotId],7000000,'o saldo do aporte não é consumido no planejamento');
+
+// Paying an installment from that lot consumes only that installment.
+const firstInstallment=allocatedRows[0];
+const paidOne=apply(allocated,{id:'f-p1',type:'move',data:{type:'pay',entry:firstInstallment.id,date:'2026-10-25',amount:firstInstallment.amount,note:'Parcela 1',account,source:lotId}},'admin@test');
+assert.equal(metrics(paidOne).lots[lotId],7000000-firstInstallment.amount);
+assert.equal(paid(paidOne,paidOne.entries.find(e=>e.id===firstInstallment.id)),700000);
+
+// Direct partner payment and project cash are also valid sources.
+const direct=apply(withLot,{
+ id:'f-plan-2',type:'expense_plan',
+ data:{expense:{...withLot.entries[0]},installments:2,replace:fundedId,funding:`direct:${partnerA}:capital`},
+},'admin@test');
+assert.equal(direct.entries.find(e=>e.paymentPlan?.id==='f-plan-2').plannedSource,`direct:${partnerA}:capital`);
+
+// Unknown or invalid sources are rejected instead of storing a dangling link.
+assert.throws(()=>apply(withLot,{
+ id:'f-plan-3',type:'expense_plan',
+ data:{expense:{...withLot.entries[0]},installments:2,replace:fundedId,funding:'aporte-inexistente'},
+},'admin@test'),/Aporte ou adiantamento não encontrado/);
+assert.throws(()=>apply(withLot,{
+ id:'f-plan-4',type:'expense_plan',
+ data:{expense:{...withLot.entries[0]},installments:2,replace:fundedId,funding:'direct:ninguem:capital'},
+},'admin@test'),/Fonte de pagamento inválida/);
+
+// A plain expense can carry the planned source without being parceled.
+const planned=apply(withLot,{id:'f-e2',type:'entry',data:{...withLot.entries[0],plannedSource:lotId}},'admin@test');
+assert.equal(planned.entries.find(e=>e.id===fundedId).plannedSource,lotId);
+assert.throws(()=>apply(withLot,{id:'f-e3',type:'entry',data:{...withLot.entries[0],plannedSource:'nao-existe'}},'admin@test'),/Aporte ou adiantamento não encontrado/);
+// Clearing the field removes the link.
+const cleared=apply(planned,{id:'f-e4',type:'entry',data:{...planned.entries.find(e=>e.id===fundedId),plannedSource:undefined}},'admin@test');
+assert.equal(cleared.entries.find(e=>e.id===fundedId).plannedSource,undefined);
+
 console.log('PASS: conversão de despesa em entrada + parcelas, vínculos de comprovante, restrições de baixa, plano existente e cancelamento.');
