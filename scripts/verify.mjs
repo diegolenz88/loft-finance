@@ -12,6 +12,7 @@ const tests = [
   "budget-edit",
   "budget-link",
   "expense-payment-edit",
+  "expense-plan-edit",
 ];
 
 let failed = 0;

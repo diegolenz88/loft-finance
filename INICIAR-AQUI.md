@@ -80,6 +80,7 @@ node --experimental-strip-types tests/budget-units.test.mjs
 node --experimental-strip-types tests/budget-edit.test.mjs
 node --experimental-strip-types tests/budget-link.test.mjs
 node --experimental-strip-types tests/expense-payment-edit.test.mjs
+node --experimental-strip-types tests/expense-plan-edit.test.mjs
 pnpm exec tsc --noEmit
 ```
 

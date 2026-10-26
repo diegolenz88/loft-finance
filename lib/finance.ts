@@ -104,14 +104,28 @@ export function budgetUnitRateio(c:Config,shares:Shares):Config{validShares(shar
 export function invariants(s:Ledger){const t=metrics(s);for(const value of [...Object.values(t.accounts),...Object.values(t.custody),...Object.values(t.lots)])ensure(value>=0,'A operação deixaria uma conta, aporte ou saldo sob guarda negativo. Verifique os vínculos.');ensure(t.operational>=0,'Recursos próprios do empreendimento insuficientes. Use um aporte identificado.');for(const p of Object.values(t.partners) as any[])ensure(p.capital>=0&&p.advance>=0&&p.distributed<=p.approved&&p.approved<=p.entitlement,'A operação excede o capital, adiantamento ou direito do sócio.');for(const e of s.entries){ensure(paid(s,e)<=e.amount,'O pagamento/recebimento excede o valor do lançamento.');for(const p of s.config.partners){ensure((t.approved[e.id]?.[p.id]||0)<=(t.entitlements[e.id]?.[p.id]||0),'Aprovação superior à participação recebida.');ensure((t.distributed[e.id]?.[p.id]||0)<=(t.approved[e.id]?.[p.id]||0),'Repasse superior ao valor aprovado.')}}}
 export function apply(s0:Ledger,action:any,actor:string,admin=true):Ledger{const s=structuredClone(s0);ensure(typeof action?.id==='string'&&action.id.length<100,'Operação inválida.');if(s.audit.some(a=>a.id===action.id))return s;s.config=withUnitActivity(s.config);
  if(action.type==='expense_plan'){
-  const {expense,installments,downPayment=0,downPaymentDue}=action.data||{};
-  ensure(expense?.kind==='expense'&&!expense.id,'O parcelamento deve ser criado como uma nova despesa.');
+  const {expense,installments,downPayment=0,downPaymentDue,replace}=action.data||{};
+  ensure(expense?.kind==='expense','Apenas despesas podem ser parceladas.');
+  // Two modes: create a new installment plan, or convert an existing expense.
+  // Conversion is only safe before any settlement, and the original is
+  // cancelled instead of removed so the history stays traceable.
+  const original=replace?s.entries.find(e=>e.id===replace):undefined;
+  if(replace){
+   ensure(original,'Lançamento não encontrado.');
+   ensure(!original!.cancelled,'Lançamento cancelado não pode ser parcelado.');
+   ensure(!original!.paymentPlan,'Este lançamento já faz parte de um parcelamento.');
+   ensure(paid(s,original!)===0,'Estorne as baixas antes de parcelar a despesa.');
+  } else ensure(!expense.id,'O parcelamento deve ser criado como uma nova despesa.');
   const schedule=paymentSchedule(expense.amount,installments,expense.due,downPayment,downPaymentDue);let result=s;
+  const carried=original?(original.attachments||[]).slice():[];
+  if(original)original.cancelled=true;
   for(const row of schedule){const suffix=row.kind==='downPayment'?'Entrada':`Parcela ${row.position}/${installments}`;const entryId=action.id+':'+row.position;
    result=apply(result,{id:entryId,type:'entry',data:{...expense,id:undefined,amount:row.amount,fees:0,due:row.due,description:expense.description+' · '+suffix}},actor,admin);
    result.entries[result.entries.length-1].paymentPlan={id:action.id,total:expense.amount,downPayment,installments,position:row.position,kind:row.kind};
   }
-  result.audit.unshift({id:action.id,at:new Date().toISOString(),actor,action:'expense_plan',description:`Despesa parcelada: ${expense.description} · ${downPayment>0?'entrada + ':''}${installments} parcela(s) · ${money(expense.amount)}`});return result;
+  // Receipts belong to the purchase, so they follow the first row of the plan.
+  if(carried.length){const first=result.entries.find(e=>e.id===action.id+':'+schedule[0].position);if(first)first.attachments=carried;}
+  result.audit.unshift({id:action.id,at:new Date().toISOString(),actor,action:'expense_plan',description:`Despesa parcelada: ${expense.description} · ${downPayment>0?'entrada + ':''}${installments} parcela(s) · ${money(expense.amount)}`+(original?` · substituiu ${original.description}`:'')});return result;
  }
  if(action.type==='batch'){ensure(Array.isArray(action.data)&&action.data.length>0&&action.data.length<=36&&action.data.every((x:any)=>x.type==='entry'),'Parcelamento inválido.');let result=s;for(const item of action.data)result=apply(result,item,actor,admin);result.audit.unshift({id:action.id,at:new Date().toISOString(),actor,action:'batch',description:'Parcelamento criado: '+action.data.length+' parcelas'});return result;}const t=metrics(s);const a=action.type==='config'?{...action.data,inactiveUnits:action.data?.inactiveUnits??s.config.inactiveUnits}:action.data;let description='';
  if(action.type==='contact'){
