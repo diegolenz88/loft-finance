@@ -13,6 +13,7 @@ const tests = [
   "budget-link",
   "expense-payment-edit",
   "expense-plan-edit",
+  "attachments",
 ];
 
 let failed = 0;
