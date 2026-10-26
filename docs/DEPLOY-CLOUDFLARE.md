@@ -12,7 +12,7 @@ Como o Loft Finance roda fora da plataforma Sites: Worker + D1 + R2 na sua conta
 | Migração | aplicada (`finance_project`, `finance_files`) |
 | Segredos | publicados |
 | R2 | ativo — bucket `loft-finance-files`, upload de comprovantes validado |
-| Dados | base vazia; requer configuração inicial do empreendimento |
+| Dados | migrados do ambiente local: 8 lançamentos, 4 movimentações, 49 registros de auditoria, 9 linhas de orçamento, 2 contatos |
 
 ## Autenticação
 
@@ -104,6 +104,26 @@ Sem o binding, anexar ou baixar comprovantes retorna uma mensagem clara em vez d
 2. O app abre em modo de configuração; cadastre o empreendimento, sócios e unidades.
 3. Confirme que os dados persistem recarregando a página.
 
+## Migrar dados do ambiente local
+
+O ledger fica em `finance_project.data` como JSON, então a cópia não exige migração de schema.
+
+```powershell
+node scripts/migrate-data.mjs --check   # compara origem e destino, sem gravar
+node scripts/migrate-data.mjs           # aborta se produção já tiver dados
+node scripts/migrate-data.mjs --force   # substitui o ledger de produção
+node scripts/compare-data.mjs           # confere digest e totais agregados
+```
+
+O script:
+
+- lê o ledger da API local (`http://127.0.0.1:5174`) usando a identidade simulada do modo dev;
+- grava um backup em `.wrangler/backup/ledger-<data>.json` antes de tocar em produção;
+- regrava a coluna `owner` com o `AUTH_OWNER_ID` de produção — sem isso a conta perde o papel de administrador;
+- aplica um `INSERT ... ON CONFLICT DO UPDATE` idempotente e verifica o resultado pela API.
+
+Comprovantes ficam no R2, não no D1. Se houver anexos, eles precisam ser copiados separadamente; a migração atual não os transporta.
+
 ## Limitações conhecidas
 
 - **Senha única = acesso total de admin.** Não há papéis distintos no login standalone. Para separar sócios (`editor`/`viewer`) sem compartilhar a senha, use Cloudflare Access com JWT e adapte `currentIdentity` para ler o e-mail do IdP.
@@ -122,4 +142,6 @@ Sem o binding, anexar ou baixar comprovantes retorna uma mensagem clara em vez d
 | `node scripts/prod-smoke.mjs <url>` | login e acesso autenticado em **produção** |
 | `node scripts/r2-smoke.mjs <url> full` | upload + download de comprovante (use `SEED=1` em base local vazia) |
 | `node scripts/r2-smoke.mjs <url> probe` | confirma que o binding R2 responde, sem gravar dados |
+| `node scripts/migrate-data.mjs` | copia o ledger local para o D1 de produção |
+| `node scripts/compare-data.mjs` | compara digests e totais entre local e produção |
 | `node scripts/dev-vars.mjs` | copia `.dev.vars` para `dist/server` (usado pelo `pnpm start`) |
