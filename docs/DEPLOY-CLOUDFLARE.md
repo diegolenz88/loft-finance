@@ -11,7 +11,7 @@ Como o Loft Finance roda fora da plataforma Sites: Worker + D1 + R2 na sua conta
 | Banco D1 | `loft-finance-db` (`d8f75d27-4308-4741-b0f0-25cb8f318a4a`, região ENAM) |
 | Migração | aplicada (`finance_project`, `finance_files`) |
 | Segredos | publicados |
-| R2 | **pendente** — upload de comprovantes desativado |
+| R2 | ativo — bucket `loft-finance-files`, upload de comprovantes validado |
 | Dados | base vazia; requer configuração inicial do empreendimento |
 
 ## Autenticação
@@ -78,6 +78,15 @@ Variáveis aceitas:
 
 ## Ativar comprovantes (R2)
 
+R2 já está ativado nesta conta e o bucket existe. O deploy atual inclui os dois bindings:
+
+```text
+env.DB (loft-finance-db)         D1 Database
+env.BUCKET (loft-finance-files)  R2 Bucket
+```
+
+Se o R2 ainda não estivesse ativo, o procedimento seria:
+
 1. Abra <https://dash.cloudflare.com> → **R2** → **Enable R2** (o plano gratuito pede cartão, sem cobrança dentro da cota).
 2. Crie o bucket: `npx wrangler r2 bucket create loft-finance-files`.
 3. Publique sem `SKIP_R2`:
@@ -87,7 +96,7 @@ $env:D1_ID = "d8f75d27-4308-4741-b0f0-25cb8f318a4a"
 pnpm deploy
 ```
 
-Enquanto o R2 estiver ausente, anexar ou baixar comprovantes retorna uma mensagem clara em vez de falhar com erro genérico.
+Sem o binding, anexar ou baixar comprovantes retorna uma mensagem clara em vez de erro genérico.
 
 ## Primeiro acesso
 
@@ -100,6 +109,7 @@ Enquanto o R2 estiver ausente, anexar ou baixar comprovantes retorna uma mensage
 - **Senha única = acesso total de admin.** Não há papéis distintos no login standalone. Para separar sócios (`editor`/`viewer`) sem compartilhar a senha, use Cloudflare Access com JWT e adapte `currentIdentity` para ler o e-mail do IdP.
 - **Dados do Sites não migram automaticamente.** A exportação CSV não reconstrói movimentos nem comprovantes. Este deploy começa vazio.
 - **`dist/` é descartado em cada build.** Sempre publique via `pnpm deploy`.
+- **O build troca o banco local.** `pnpm deploy` grava os nomes reais no `wrangler.json`, então um `pnpm start` seguinte aponta para outro banco local (sem tabelas) e a interface falha até rodar a migração `--local` de novo. Alternativa: rode `pnpm build` sem `deploy` antes de testar localmente.
 - **`vinext 1.0.0-beta.5`** roda no Workers, mas é versão beta fora da plataforma original.
 - O Worker não faz backup automático. Configure exportação periódica do D1 e cópia do bucket R2 antes de registrar dados reais.
 
@@ -110,4 +120,6 @@ Enquanto o R2 estiver ausente, anexar ou baixar comprovantes retorna uma mensage
 | `node scripts/verify.mjs` | 10 testes financeiros + `tsc --noEmit` |
 | `node scripts/auth-smoke.mjs <url>` | login no Worker **local** (`pnpm start`) |
 | `node scripts/prod-smoke.mjs <url>` | login e acesso autenticado em **produção** |
+| `node scripts/r2-smoke.mjs <url> full` | upload + download de comprovante (use `SEED=1` em base local vazia) |
+| `node scripts/r2-smoke.mjs <url> probe` | confirma que o binding R2 responde, sem gravar dados |
 | `node scripts/dev-vars.mjs` | copia `.dev.vars` para `dist/server` (usado pelo `pnpm start`) |
