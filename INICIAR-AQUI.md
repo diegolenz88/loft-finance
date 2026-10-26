@@ -123,3 +123,9 @@ Site independente, use o fluxo de criação da plataforma, sem reaproveitar a id
 de publicação do Site original.
 
 O arquivo `README.md` contém a documentação técnica original do projeto.
+
+## Publicar em um Worker próprio
+
+O projeto também pode ser publicado diretamente em uma conta Cloudflare, sem a
+plataforma Sites, usando login por senha. O passo a passo, os recursos criados e
+as limitações estão em `docs/DEPLOY-CLOUDFLARE.md`.

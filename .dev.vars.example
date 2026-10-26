@@ -1,0 +1,13 @@
+# Copy to `.dev.vars` to test the standalone password login with `pnpm start`.
+# Real deployments keep these values as Worker secrets, never in the repository.
+
+# HMAC key for the session cookie. Minimum 32 characters.
+AUTH_SECRET=change-me-to-a-long-random-string-at-least-32-chars
+
+# Single access password for the standalone deployment.
+APP_PASSWORD=change-me
+
+# Owner identity. AUTH_OWNER_ID becomes finance_project.owner and must never
+# change after the first save, or the administrator role is lost.
+AUTH_OWNER_EMAIL=owner@example.com
+AUTH_OWNER_ID=owner
