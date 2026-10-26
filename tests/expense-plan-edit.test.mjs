@@ -164,4 +164,42 @@ assert.equal(metrics(bigPlan).contracted,11200000,'contratado inalterado');
 assert.equal(metrics(bigPlan).payable,4200000,'a pagar = saldo restante');
 assert.equal(metrics(bigPlan).accounts[account],11200000-7000000,'caixa reflete apenas o pagamento efetivo');
 
+// No down payment: the whole balance is split into equal installments.
+// Case A — a R$ 70.000,00 expense in 10x with nothing paid.
+const seventy=apply(ledger,{id:'n70-e1',type:'entry',data:{...expense({amount:7000000,due:'2026-11-10'}),id:undefined}},'admin@test');
+const seventyId=seventy.entries[0].id;
+const seventyPlan=apply(seventy,{
+ id:'n70-plan',type:'expense_plan',
+ data:{expense:{...seventy.entries[0]},installments:10,replace:seventyId},
+},'admin@test');
+const seventyRows=seventyPlan.entries.filter(e=>e.paymentPlan?.id==='n70-plan');
+assert.equal(seventyRows.length,10,'10 parcelas sem entrada');
+assert.equal(seventyRows.reduce((total,row)=>total+row.amount,0),7000000);
+assert.ok(seventyRows.every(row=>row.amount===700000),'10 x R$ 7.000,00 iguais');
+assert.ok(seventyRows.every(row=>row.paymentPlan.kind==='installment'),'nenhuma linha de entrada');
+assert.equal(seventyPlan.entries.every(e=>e.paymentPlan?.downPayment!==undefined?e.paymentPlan.downPayment===0:true),true);
+
+// Case B — R$ 112.000,00 with R$ 70.000,00 paid: only the R$ 42.000,00
+// balance is split in 10x without a new down payment.
+const balancePlan=apply(bigPaid,{
+ id:'n42-plan',type:'expense_plan',
+ data:{expense:{...bigPaid.entries[0]},installments:10,replace:bigId},
+},'admin@test');
+const balanceRows=balancePlan.entries.filter(e=>e.paymentPlan?.id==='n42-plan');
+assert.equal(balanceRows.length,10);
+assert.equal(balanceRows.reduce((total,row)=>total+row.amount,0),4200000,'70000 pagos + 42000 parcelados');
+assert.deepEqual([...new Set(balanceRows.map(row=>row.amount))],[420000],'todas as 10 parcelas com R$ 4.200,00');
+assert.ok(balanceRows.every(row=>row.paymentPlan.kind==='installment'),'sem entrada');
+assert.equal(metrics(balancePlan).contracted,11200000,'contratado preservado');
+
+// Installments must remain whole cents even when the balance does not divide.
+const odd=apply(ledger,{id:'odd-e1',type:'entry',data:{...expense({amount:100000,due:'2026-11-10'}),id:undefined}},'admin@test');
+const oddPlan=apply(odd,{
+ id:'odd-plan',type:'expense_plan',
+ data:{expense:{...odd.entries[0]},installments:3,replace:odd.entries[0].id},
+},'admin@test');
+const oddRows=oddPlan.entries.filter(e=>e.paymentPlan?.id==='odd-plan');
+assert.equal(oddRows.reduce((total,row)=>total+row.amount,0),100000,'soma exata');
+assert.deepEqual(oddRows.map(row=>row.amount),[33334,33333,33333],'resto vai para a primeira parcela');
+
 console.log('PASS: conversão de despesa em entrada + parcelas, vínculos de comprovante, restrições de baixa, plano existente e cancelamento.');
