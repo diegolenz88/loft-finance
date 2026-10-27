@@ -1,6 +1,6 @@
 import {bindings,access,failure,sameOrigin} from '@/lib/server';
 import {apply,id,ruleAt,today} from '@/lib/finance';
-import {normalizeEmail,saveAccess} from '@/lib/credentials';
+import {isRole,normalizeEmail,saveAccess} from '@/lib/credentials';
 import {secretProblem} from '@/lib/passwords';
 
 export const dynamic = 'force-dynamic';
@@ -19,12 +19,12 @@ function nextRuleDate(rules:{from:string}[], start:string): string {
   throw new Error('Não há data livre para a nova vigência das regras.');
 }
 
-// Creates a partner and the matching login in one step, so a new person can be
-// added from the screen without touching the Worker or the database.
+// Creates a login and, optionally, the matching partner.
 //
-// A new partner starts with 0% in every rule: the cost/revenue/ownership split is
-// a financial decision and must be adjusted deliberately in "Regras de
-// participação". Adding a 0% share keeps the existing totals at exactly 100%.
+// `asPartner: false` creates a standalone account: the person can sign in and use
+// the app with the chosen role, without appearing in rateios, extratos or the
+// partner lists. That is the case for accountants and assistants who need access
+// but hold no share of the project.
 export async function POST(req: Request){
   try{
     sameOrigin(req);
@@ -32,16 +32,17 @@ export async function POST(req: Request){
     if(a.role !== 'admin') throw new Error('Apenas administradores cadastram novos usuários.');
     if(!a.ledger || !a.row) throw new Error('Configure o empreendimento primeiro.');
 
-    const body = (await req.json().catch(() => ({}))) as {name?:string; email?:string; role?:string; secret?:string};
+    const body = (await req.json().catch(() => ({}))) as {name?:string; email?:string; role?:string; secret?:string; asPartner?:boolean};
     const email = normalizeEmail(body?.email);
     const name = typeof body?.name === 'string' ? body.name.trim() : '';
     const role = typeof body?.role === 'string' ? body.role : 'viewer';
     const plain = typeof body?.secret === 'string' ? body.secret : '';
+    const asPartner = body?.asPartner !== false;
 
     if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error('Informe um e-mail válido.');
     if(!name) throw new Error('Informe o nome do usuário.');
     if(name.length > 120) throw new Error('O nome é muito longo.');
-    if(!['admin','editor','viewer'].includes(role)) throw new Error('Permissão inválida.');
+    if(!isRole(role)) throw new Error('Permissão inválida.');
     const problem = secretProblem(plain);
     if(problem) throw new Error(problem);
 
@@ -50,7 +51,17 @@ export async function POST(req: Request){
       if(!existing.active) throw new Error('Este e-mail pertence a um sócio inativo. Reative-o antes de criar o acesso.');
       await saveAccess(email, plain, a.user.email);
       return Response.json(
-        {ok:true, email, created:false, partner:{id:existing.id, name:existing.name, role:existing.role}},
+        {ok:true, email, created:false, asPartner:true, partner:{id:existing.id, name:existing.name, role:existing.role}},
+        {headers:{'Cache-Control':'no-store'}},
+      );
+    }
+
+    // Standalone account: no partner row, no rule version. The role lives with
+    // the credential and is honoured by `access()`.
+    if(!asPartner){
+      await saveAccess(email, plain, a.user.email, {name, role});
+      return Response.json(
+        {ok:true, email, created:true, asPartner:false, access:{name, role}},
         {headers:{'Cache-Control':'no-store'}},
       );
     }
@@ -86,12 +97,14 @@ export async function POST(req: Request){
       .run();
     if(saved.meta.changes !== 1) throw new Error('Outra alteração foi salva enquanto isso. Recarregue e tente novamente.');
 
-    await saveAccess(email, plain, a.user.email);
+    // The partner's role comes from the ledger, so the credential needs no role.
+    await saveAccess(email, plain, a.user.email, {name});
     return Response.json(
       {
         ok:true,
         email,
         created:true,
+        asPartner:true,
         version:a.row.version + 1,
         ruleFrom: from,
         partner:{id:partnerId, name, role},

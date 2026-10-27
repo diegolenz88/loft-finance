@@ -148,7 +148,7 @@ function EntryDetail({s,e,open,save,busy,real,admin,canEdit,onSelect}:any){const
  {entry.kind==='revenue'&&<div className="detail-summary"><div><small>Taxas previstas</small><strong>{money(entry.fees)}</strong></div><div><small>Reserva retida</small><strong>{money(sum(movements.filter(m=>m.type==='receive').map(m=>m.reserve||0)))}</strong></div></div>}
  <h3 className="detail-section-title">{entry.kind==='expense'?'Comprovantes da despesa':'Comprovantes da receita'}</h3><div className="attachment-area">{entry.attachments.filter(f=>f.kind!=='payment').map(f=><AttachmentLink key={f.id} file={f} onPreview={previewFile}/>)}{canEdit&&<label className="upload-control"><Paperclip size={20}/><span>{uploading==='expense'?'Enviando comprovante...':(entry.kind==='expense'?'Adicionar nota fiscal ou orçamento':'Adicionar comprovante')}<small>Documento da despesa · PDF, JPG, PNG ou WebP · até 10 MB</small></span><input type="file" className="sr-only" accept="application/pdf,image/jpeg,image/png,image/webp" disabled={!!uploading||busy} onChange={ev=>{if(ev.target.files?.[0])upload(ev.target.files[0],'expense');ev.target.value=''}}/></label>}</div><h3 className="detail-section-title">Pagamentos e movimentações</h3>{movements.length?<div className="movement-list">{movements.map(m=><div key={m.id}><span className="history-icon"><ArrowLeftRight size={16}/></span><div><strong>{moveLabels[m.type]} · {money(m.amount)}</strong><small>{fmtDate(m.date)} · {state.config.partners.find(p=>p.id===m.partner)?.name||m.account||'Pagamento direto'}</small><small>{m.source&&state.moves.find(l=>l.id===m.source)?'Vínculo ao aporte #'+m.source.slice(0,8):m.source?.startsWith('direct:')?(m.source.endsWith(':capital')?'Aporte direto':'Adiantamento direto'):m.source?.startsWith('custody:')?'Receita sob guarda utilizada':m.source==='project'?'Recursos do empreendimento':''}</small><small>{m.actor}</small>{entry.attachments.filter(f=>f.move===m.id).map(f=><AttachmentLink key={f.id} file={f} onPreview={previewFile}/>)}</div>{canEdit&&(m.type==='pay'||m.type==='receive')&&<label className="icon-button" title="Anexar comprovante de pagamento" aria-label="Anexar comprovante de pagamento"><Paperclip size={15}/><input type="file" className="sr-only" accept="application/pdf,image/jpeg,image/png,image/webp" disabled={!!uploading||busy} onChange={ev=>{if(ev.target.files?.[0])upload(ev.target.files[0],'payment',m.id);ev.target.value=''}}/></label>}{canEdit&&EDITABLE_MOVES.includes(m.type)&&<button type="button" className="icon-button" title="Corrigir movimentação" aria-label={'Corrigir '+moveLabels[m.type]} onClick={()=>open('edit-move',state.entries.find((x:Entry)=>x.id===m.entry),undefined,undefined,m)}><Pencil size={15}/></button>}</div>)}</div>:<p className="muted">Nenhuma movimentação registrada.</p>}<h3 className="detail-section-title">Comprovantes de pagamento</h3>{entry.attachments.filter(f=>f.kind==='payment').length?<div className="attachment-area">{entry.attachments.filter(f=>f.kind==='payment').map(f=><AttachmentLink key={f.id} file={f} onPreview={previewFile}/>)}</div>:<p className="muted">Nenhum comprovante de pagamento anexado. Use o clipe em cada pagamento acima.</p>}<p className="footnote">Estornos podem ser registrados no extrato em Sócios e aportes.</p>{preview&&<AttachmentPreview file={preview} onClose={()=>setPreview(null)}/>}</div>}
 function AccessManager({partners,admin,onChanged}:{partners:Partner[];admin:boolean;onChanged:()=>void}){
- const [data,setData]=useState<{accesses:string[];owner:string}|null>(null);
+ const [data,setData]=useState<{accesses:string[];owner:string;standalone?:{email:string;name:string|null;role:string|null}[]}|null>(null);
  const [editing,setEditing]=useState<string|null>(null);
  const [secretValue,setSecretValue]=useState('');
  const [confirmation,setConfirmation]=useState('');
@@ -156,11 +156,11 @@ function AccessManager({partners,admin,onChanged}:{partners:Partner[];admin:bool
  const [feedback,setFeedback]=useState<{kind:'ok'|'err';text:string}|null>(null);
  const [link,setLink]=useState<{email:string;url:string}|null>(null);
  const [creating,setCreating]=useState(false);
- const [newUser,setNewUser]=useState({name:'',email:'',role:'viewer'});
+ const [newUser,setNewUser]=useState({name:'',email:'',role:'viewer',asPartner:true});
  const [newSecret,setNewSecret]=useState('');
  const [newConfirm,setNewConfirm]=useState('');
  async function refresh(){
-  try{const j:any=await requestJson('/api/credentials');setData({accesses:Array.isArray(j.accesses)?j.accesses:[],owner:String(j.owner||'')})}
+  try{const j:any=await requestJson('/api/credentials');setData({accesses:Array.isArray(j.accesses)?j.accesses:[],owner:String(j.owner||''),standalone:Array.isArray(j.standalone)?j.standalone:[]})}
   catch{setData({accesses:[],owner:''})}
  }
  useEffect(()=>{if(admin)refresh()},[admin]);
@@ -188,8 +188,9 @@ function AccessManager({partners,admin,onChanged}:{partners:Partner[];admin:bool
   if(newSecret!==newConfirm){setFeedback({kind:'err',text:'As senhas não conferem.'});return}
   setBusy(true);setFeedback(null);
   try{
-   const j:any=await requestJson('/api/partners',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,email,role:newUser.role,secret:newSecret})});
-   toast.success(j.created?'Usuário criado. Ajuste a participação em Regras de participação.':'Acesso criado para '+j.email);   setCreating(false);setNewUser({name:'',email:'',role:'viewer'});setNewSecret('');setNewConfirm('');
+   const j:any=await requestJson('/api/partners',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,email,role:newUser.role,secret:newSecret,asPartner:newUser.asPartner})});
+   toast.success(!j.created?'Acesso criado para '+j.email:(j.asPartner?'Usuário criado. Ajuste a participação em Regras de participação.':'Acesso criado sem vínculo de sócio.'));
+   setCreating(false);setNewUser({name:'',email:'',role:'viewer',asPartner:true});setNewSecret('');setNewConfirm('');
    await refresh();
    if(j.created)onChanged();
   }catch(e){reportApiError(e);setFeedback({kind:'err',text:e instanceof Error?e.message:'Não foi possível criar o usuário.'})}
@@ -219,7 +220,7 @@ function AccessManager({partners,admin,onChanged}:{partners:Partner[];admin:bool
  {!admin&&<p className="footnote">Somente administradores criam ou removem acessos.</p>}
  {admin&&<>
   {creating&&<div className="access-new">
-   <div className="access-new-head"><strong>Novo usuário</strong><small>O acesso é criado junto com o cadastro de sócio, já com a permissão escolhida.</small></div>
+   <div className="access-new-head"><strong>Novo usuário</strong><small>Crie o acesso de quem precisa entrar. Pode ser um sócio ou apenas alguém com acesso ao sistema.</small></div>
    <div className="form-grid">
     <Field label="Nome"><input value={newUser.name} onChange={e=>setNewUser(x=>({...x,name:e.target.value}))} placeholder="Nome completo"/></Field>
     <Field label="E-mail de acesso"><input type="email" value={newUser.email} onChange={e=>setNewUser(x=>({...x,email:e.target.value}))} placeholder="pessoa@exemplo.com"/></Field>
@@ -227,9 +228,10 @@ function AccessManager({partners,admin,onChanged}:{partners:Partner[];admin:bool
     <Field label="Senha" hint="Mínimo de 8 caracteres, com ao menos uma letra e um número."><input type="password" autoComplete="new-password" value={newSecret} onChange={e=>setNewSecret(e.target.value)}/></Field>
     <Field label="Confirmar senha"><input type="password" autoComplete="new-password" value={newConfirm} onChange={e=>setNewConfirm(e.target.value)}/></Field>
    </div>
+   <label className="checkbox-label wide"><Checkbox checked={newUser.asPartner} onCheckedChange={v=>setNewUser(x=>({...x,asPartner:!!v}))}/>Este usuário é sócio do empreendimento</label>
    <div className="access-new-actions"><button type="button" className="btn primary" disabled={busy} onClick={createUser}>{busy?<LoaderCircle className="animate-spin" size={14}/>:<Plus size={14}/>}Criar usuário</button><button type="button" className="btn secondary" disabled={busy} onClick={()=>{setCreating(false);setFeedback(null)}}>Cancelar</button></div>
    {feedback&&<p className={feedback.kind==='err'?'form-error':'positive-text'} role="status">{feedback.text}</p>}
-   <p className="footnote">O novo sócio começa com 0% em participação, custeio e receitas. Ajuste em “Regras de participação”.</p>
+   <p className="footnote">{newUser.asPartner?'O novo sócio começa com 0% em participação, custeio e receitas. Ajuste em “Regras de participação”.':'Sem vínculo de sócio: a pessoa entra e usa o sistema com a permissão escolhida, mas não aparece em rateios, extratos nem na lista de sócios.'}</p>
   </div>}
   <div className="access-list">{withEmail.map(p=>{
    const email=p.email.toLowerCase();const active=has(email);const open=editing===email;
@@ -251,6 +253,22 @@ function AccessManager({partners,admin,onChanged}:{partners:Partner[];admin:bool
     </div>}
    </div>
   })}</div>
+  {(data?.standalone?.length??0)>0&&<><h3 className="detail-section-title">Usuários sem vínculo de sócio</h3><div className="access-list">{data!.standalone!.map(u=>{const email=u.email.toLowerCase();const active=has(email);const open=editing===email;return <div className="access-row" key={u.email}>
+   <div className="access-id"><strong>{u.name||'Usuário do sistema'}</strong><small><Mail size={12}/>{u.email}</small></div>
+   <span className={'tag '+(active?'success':'neutral')}>{active?'Acesso ativo':'Sem acesso'}</span>
+   <span className="tag neutral">{u.role==='admin'?'Administrador':u.role==='editor'?'Editor':'Somente leitura'}</span>
+   <div className="access-actions">
+    <button type="button" className="btn small secondary" disabled={busy} onClick={()=>open?cancel():start(email)}>{open?'Cancelar':'Alterar senha'}</button>
+    <button type="button" className="btn small secondary" disabled={busy} onClick={()=>generateLink(email)}>Gerar link</button>
+    <button type="button" className="btn small secondary" disabled={busy} onClick={()=>revoke(email)}><Trash2 size={14}/>Remover</button>
+   </div>
+   {open&&<div className="access-form">
+    <Field label="Nova senha" hint="Mínimo de 8 caracteres, com ao menos uma letra e um número."><input type="password" autoComplete="new-password" value={secretValue} onChange={e=>setSecretValue(e.target.value)}/></Field>
+    <Field label="Confirmar senha"><input type="password" autoComplete="new-password" value={confirmation} onChange={e=>setConfirmation(e.target.value)}/></Field>
+    <div className="access-form-actions"><button type="button" className="btn primary small" disabled={busy} onClick={()=>submit(email)}>{busy?<LoaderCircle className="animate-spin" size={14}/>:<Check size={14}/>}Salvar acesso</button></div>
+    {feedback&&<p className={feedback.kind==='err'?'form-error wide':'positive-text wide'} role="status">{feedback.text}</p>}
+   </div>}
+  </div>})}</div></>}
   {!withEmail.length&&<p className="footnote">Cadastre o e-mail do sócio acima e salve as configurações para liberar o acesso.</p>}
   {link&&<div className="access-link"><div><strong>Link de acesso gerado</strong><small>{link.email} · válido por 15 minutos e de uso único. Envie por um canal seguro.</small></div><div className="access-link-row"><input readOnly value={link.url} aria-label="Link de acesso" onFocus={e=>e.currentTarget.select()}/><button type="button" className="btn small secondary" onClick={()=>{navigator.clipboard.writeText(link.url).then(()=>toast.success('Link copiado.')).catch(()=>toast.info('Selecione e copie o endereço.'))}}>Copiar</button><button type="button" className="btn small secondary" onClick={()=>setLink(null)} aria-label="Fechar link"><X size={14}/></button></div></div>}
   <div className="access-note"><ShieldCheck size={16}/><div><strong>Proprietário</strong><small>{data?.owner||'—'} entra com a senha mestra do Worker (APP_PASSWORD). Ela continua valendo como recuperação caso alguma senha seja perdida.</small></div></div>

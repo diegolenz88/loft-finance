@@ -125,6 +125,19 @@ acesso, permissão e senha. Em um passo só, o app:
 Ajuste os percentuais em **Configurações → Regras de participação**. Sócios não
 podem ser excluídos, apenas inativados, para preservar o histórico.
 
+Desmarque **“Este usuário é sócio do empreendimento”** para criar alguém que
+apenas acessa o sistema (contador, assistente, auditor). Nesse caso:
+
+- nenhum sócio é criado e nenhuma vigência de regras nova é gerada;
+- o papel fica gravado na própria credencial e é consultado no login;
+- a pessoa aparece em **Acessos ao sistema → Usuários sem vínculo de sócio**, onde
+  pode ter a senha alterada ou o acesso removido;
+- ela não aparece em rateios, extratos, listas de sócios nem nos relatórios.
+
+A ordem de autorização é: proprietário → sócio ativo → usuário sem vínculo. Um
+e-mail que pertença a um sócio não pode ser recriado como usuário avulso, para
+não existirem duas fontes de permissão para a mesma pessoa.
+
 Para remover o acesso de alguém, clique em **Remover**: as senhas param de valer
 imediatamente e os links pendentes continuam válidos por até 15 minutos.
 
