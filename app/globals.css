@@ -344,6 +344,10 @@ body:has(.print-doc) .main{padding-bottom:20px!important}
 .access-note svg{flex-shrink:0;margin-top:1px;color:var(--primary)}
 .access-note strong{display:block;font-size:12.5px;color:var(--foreground)}
 .access-note small{display:block;font-size:11.5px;line-height:1.5;margin-top:2px}
+.access-note-warn{border-color:#eed7ac;background:#fdf3e0;color:#7a5310}
+.access-note-warn svg{color:#8a5a10}
+.access-note-warn strong{color:#5f400c}
+.access-note-actions{margin-top:8px}
 .access-link{margin-top:12px;padding:12px 14px;border:1px solid #bfdcd8;border-radius:12px;background:#eef6f6;color:#244a48}
 .access-link strong{display:block;font-size:12.5px}
 .access-link small{display:block;font-size:11.5px;line-height:1.5;margin-top:2px;color:#4c626b}

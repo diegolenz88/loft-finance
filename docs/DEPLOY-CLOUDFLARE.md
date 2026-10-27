@@ -57,14 +57,40 @@ pessoa informa o e-mail e recebe um endereço de uso único, válido por 15 minu
 | Quem recebe | proprietário e sócios ativos com e-mail cadastrado |
 | Resposta | sempre a mesma, para não revelar quem tem acesso |
 
-Para o envio automático, configure no Worker:
+Para o envio automático, escolha **um** provedor e informe a chave e o remetente.
+Todos usam apenas chamadas HTTPS, sem binding extra:
 
-| Segredo / variável | Função |
+| Provedor | Variável da chave | Observação |
+| --- | --- | --- |
+| Brevo | `BREVO_API_KEY` | Grátis 300/dia; basta verificar um e-mail remetente, sem domínio próprio |
+| Resend | `RESEND_API_KEY` | Grátis 3.000/mês; exige domínio verificado para enviar a terceiros |
+| MailerSend | `MAILERSEND_API_KEY` | Grátis 3.000/mês; exige domínio verificado |
+| Cloudflare Email Sending | binding `EMAIL` | Nativo, em beta; exige domínio na Cloudflare |
+
+Além da chave, defina o remetente:
+
+| Variável | Exemplo |
 | --- | --- |
-| `RESEND_API_KEY` | chave da API do Resend |
-| `MAGIC_LINK_FROM` | remetente verificado, ex. `Loft Finance <acesso@seudominio.com>` |
+| `MAGIC_LINK_FROM` | `Loft Finance <acesso@seudominio.com>` |
+| `MAIL_PROVIDER` | opcional; força um provedor quando há mais de uma chave |
 
-Sem esses valores o envio fica desativado e a tela avisa para pedir o link ao
+O caminho mais rápido (o script valida, publica os segredos e guarda no arquivo
+local ignorado pelo Git):
+
+```powershell
+$env:MAIL_PROVIDER = "brevo"
+$env:BREVO_API_KEY = "<chave do painel do Brevo>"
+$env:MAGIC_LINK_FROM = "Loft Finance <acesso@seudominio.com>"
+node scripts/setup-email.mjs
+```
+
+Depois do deploy, confirme em **Configurações → Acessos ao sistema**: o bloco
+"Envio de e-mail configurado" mostra o provedor e o remetente, e o botão
+**Enviar e-mail de teste** dispara uma mensagem real para o seu endereço. Se o
+provedor recusar a chave ou o remetente, a tela diz exatamente isso (chave
+recusada ou remetente não autorizado) em vez de falhar em silêncio.
+
+Sem nenhuma chave o envio fica desativado e a tela avisa para pedir o link ao
 administrador. O administrador pode gerar o link manualmente em
 **Configurações → Acessos ao sistema → Gerar link** (copiado para a área de
 transferência, válido por 15 minutos) e enviar por um canal seguro.
