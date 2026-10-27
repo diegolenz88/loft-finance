@@ -1,6 +1,10 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "../vendor/shadcn-tailwind-4.13.0.css";
+/* Tema por classe: o variant dark do Tailwind não deve seguir
+   prefers-color-scheme, senão um SO escuro força superfícies escuras
+   dentro do tema claro. */
+@custom-variant dark (&:where(.dark, .dark *));
 :root{--background:#f3f6f7;--foreground:#1b2933;--card:#fff;--card-foreground:#1b2933;--popover:#fff;--popover-foreground:#1b2933;--primary:#087e78;--primary-foreground:#fff;--secondary:#e6edef;--secondary-foreground:#31434b;--muted:#eaf0f1;--muted-foreground:#586b73;--accent:#deeeee;--accent-foreground:#075d59;--destructive:#b42335;--border:#cbd7da;--input:#b9c8cc;--ring:#087e78;--chart-1:#087e78;--chart-2:#6381a6;--chart-3:#b07823;--chart-4:#b14f67;--chart-5:#397da0;--radius:.75rem;--sidebar:#eaf0f1;--sidebar-foreground:#263a42;--sidebar-primary:#087e78;--sidebar-primary-foreground:#fff;--sidebar-accent:#d8e9e9;--sidebar-accent-foreground:#075d59;--sidebar-border:#cbd7da;--sidebar-ring:#087e78;--surface-raised:#fff;--surface-input:#fff;--surface-header:#fff;--surface-subtle:#eaf0f1;--line:#d7e0e2;--text-secondary:#586b73;color-scheme:light}
 @media(prefers-color-scheme:dark){:root:not([data-theme="light"]){color-scheme:dark;--background:#0b111b;--foreground:#edf2f7;--card:#111a26;--card-foreground:#edf2f7;--popover:#172231;--popover-foreground:#eef3fa;--primary:#63dfd8;--primary-foreground:#082725;--secondary:#192431;--secondary-foreground:#cad6e3;--muted:#172230;--muted-foreground:#8d9caf;--accent:#1d303b;--accent-foreground:#72e4dc;--destructive:#fa8a91;--border:#233040;--input:#2c3a4d;--ring:#63dfd8;--sidebar:#0e1621;--sidebar-foreground:#b0bece;--sidebar-primary:#63dfd8;--sidebar-primary-foreground:#082725;--sidebar-accent:#183032;--sidebar-accent-foreground:#72e4dc;--sidebar-border:#202b3a;--sidebar-ring:#63dfd8;--surface-raised:#111a26;--surface-input:#111c29;--surface-header:#0b121d;--surface-subtle:#172230;--line:#233040;--text-secondary:#9aafc3}}
 .dark{--background:#0b111b;--foreground:#edf2f7;--card:#111a26;--card-foreground:#edf2f7;--popover:#172231;--popover-foreground:#eef3fa;--primary:#63dfd8;--primary-foreground:#082725;--secondary:#192431;--secondary-foreground:#cad6e3;--muted:#172230;--muted-foreground:#8d9caf;--accent:#1d303b;--accent-foreground:#72e4dc;--destructive:#fa8a91;--border:#233040;--input:#2c3a4d;--ring:#63dfd8;--chart-1:#63dfd8;--chart-2:#a6a4f6;--chart-3:#f0bc6b;--chart-4:#f792a7;--chart-5:#8acaf7;--sidebar:#0e1621;--sidebar-foreground:#b0bece;--sidebar-primary:#63dfd8;--sidebar-primary-foreground:#082725;--sidebar-accent:#183032;--sidebar-accent-foreground:#72e4dc;--sidebar-border:#202b3a;--sidebar-ring:#63dfd8;--surface-raised:#111a26;--surface-input:#111c29;--surface-header:#0b121d;--surface-subtle:#172230;--line:#233040;--text-secondary:#9aafc3;color-scheme:dark}
@@ -190,3 +194,23 @@ body:has(.print-doc) .main{padding-bottom:20px!important}
 .description-cell{color:#a9bdd1;font-size:12px;max-width:340px}
 .print-only{display:none}
 @media print{.description-cell{color:#17232d!important;max-width:none}.print-only{display:block}.print-head{display:flex!important;justify-content:space-between;align-items:baseline;gap:12px;border-bottom:2px solid #17232d;padding-bottom:6px;margin-bottom:10px}.print-head strong{font-size:14px;color:#17232d}.print-head span{font-size:10px;color:#354454;text-align:right}}
+
+@media screen{
+:root:not(.dark) .searchbox{background:#fff!important;border-color:var(--line)!important;color:#4d626b}
+:root:not(.dark) .searchbox input{color:var(--foreground)!important}
+:root:not(.dark) .app-sidebar [data-slot=sidebar-menu-button]:hover{background:#dbe7e8!important;color:#16292f!important}
+:root:not(.dark) .tag.success{color:#0f6b4f;background:#e2f3ea;border-color:#b6ddc9}
+:root:not(.dark) .tag.danger{color:#a11f31;background:#fdeaea;border-color:#f3c2c6}
+:root:not(.dark) .tag.warning{color:#8a5a10;background:#fdf3e0;border-color:#eed7ac}
+:root:not(.dark) .tag.neutral{color:#3f5560;background:#eaf0f2;border-color:#ccd9dd}
+:root:not(.dark) .accounts-grid>div{background:#fff!important;border-color:var(--line)!important;color:#40545d}
+:root:not(.dark) .accounts-grid strong{color:#16292f}
+:root:not(.dark) .info-note{background:#eef5f6!important;border-color:#cfe0e2!important;color:#40545d!important}
+:root:not(.dark) .balance-list>div{border-color:var(--line)}
+:root:not(.dark) .balance-list dt{color:#516770}
+:root:not(.dark) .balance-list dd{color:#16292f}
+:root:not(.dark) .partner-config{background:#fff!important;border-color:var(--line)!important}
+:root:not(.dark) .history-icon{background:#e4edee!important;color:#3d5b66!important}
+:root:not(.dark) .history-list>div{border-color:var(--line)}
+:root:not(.dark) .history-list small,:root:not(.dark) .audit-id{color:#516770}
+}
