@@ -1,6 +1,7 @@
 import {headers} from 'next/headers';
 import {redirect} from 'next/navigation';
 import {currentIdentity} from '@/lib/identity';
+import {getThemePreference} from '@/lib/theme';
 import FinanceApp from './finance-app';
 
 export const dynamic = 'force-dynamic';
@@ -11,5 +12,6 @@ export default async function Home(){
   // Standalone deployments do not receive platform identity headers, so an
   // anonymous visitor is sent to the password screen instead of a blank 401.
   if (!user) redirect('/api/session');
-  return <FinanceApp/>;
+  const theme=await getThemePreference();
+  return <FinanceApp initialTheme={theme}/>;
 }

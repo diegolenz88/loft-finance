@@ -1,5 +1,6 @@
 import {env} from 'cloudflare:workers';
 import {getChatGPTUser} from '@/app/chatgpt-auth';
+import {headers} from 'next/headers';
 
 // The app can run under two identity providers:
 // 1. A hosting platform that injects `oai-authenticated-user-*` headers (Sites).
@@ -11,6 +12,8 @@ export type Identity = {userId:string;email:string;displayName:string};
 export const SESSION_COOKIE = 'lf_session';
 const SESSION_MAX_AGE = 60 * 60 * 24 * 30;
 const encoder = new TextEncoder();
+const ACCESS_KEYS_TTL = 60 * 60 * 1000;
+let accessKeysCache:{expires:number;keys:JsonWebKey[]}|undefined;
 
 function base64url(bytes: Uint8Array): string {
   let binary = '';
@@ -34,6 +37,64 @@ async function sign(payload: string, secret: string): Promise<string> {
 function secret(name: string): string | undefined {
   const value = (env as unknown as Record<string, unknown>)[name];
   return typeof value === 'string' && value ? value : undefined;
+}
+
+function setting(name:string):string|undefined{return secret(name)}
+
+function decodeBase64url(value:string):Uint8Array{
+  const normalized=value.replace(/-/g,'+').replace(/_/g,'/');
+  const binary=atob(normalized+'='.repeat((4-normalized.length%4)%4));
+  return Uint8Array.from(binary,char=>char.charCodeAt(0));
+}
+
+function decodeJwtPart(value:string):any{
+  return JSON.parse(new TextDecoder().decode(decodeBase64url(value)));
+}
+
+async function accessKeys(teamDomain:string):Promise<JsonWebKey[]>{
+  if(accessKeysCache&&accessKeysCache.expires>Date.now())return accessKeysCache.keys;
+  const response=await fetch(`https://${teamDomain}/cdn-cgi/access/certs`,{headers:{accept:'application/json'},signal:AbortSignal.timeout(5000)});
+  if(!response.ok)throw new Error('Não foi possível validar a identidade do Cloudflare Access.');
+  const body=await response.json() as {public_certificates?:JsonWebKey[];keys?:JsonWebKey[]};
+  const keys=body.keys||body.public_certificates;
+  if(!Array.isArray(keys)||!keys.length)throw new Error('Cloudflare Access não retornou chaves públicas válidas.');
+  accessKeysCache={keys,expires:Date.now()+ACCESS_KEYS_TTL};
+  return keys;
+}
+
+function keyId(key:JsonWebKey):string|undefined{
+  const value=(key as JsonWebKey&{kid?:unknown}).kid;
+  return typeof value==='string'?value:undefined;
+}
+
+async function accessIdentity(assertion:string|undefined):Promise<Identity|null>{
+  const teamDomain=setting('ACCESS_TEAM_DOMAIN')?.replace(/^https?:\/\//,'').replace(/\/$/,'');
+  const audience=setting('ACCESS_AUD');
+  if(!teamDomain||!audience||!assertion)return null;
+  try{
+    const parts=assertion.split('.');
+    if(parts.length!==3)return null;
+    const header=decodeJwtPart(parts[0]);
+    const claims=decodeJwtPart(parts[1]);
+    if(header.alg!=='RS256'||typeof header.kid!=='string')return null;
+    const now=Math.floor(Date.now()/1000);
+    const aud=Array.isArray(claims.aud)?claims.aud:[claims.aud];
+    if(claims.iss!==`https://${teamDomain}`||!aud.includes(audience)||typeof claims.exp!=='number'||claims.exp<=now)return null;
+    if(typeof claims.nbf==='number'&&claims.nbf>now+60)return null;
+    // Cloudflare Access signs the identity and audience; its documented JWT
+    // payload does not guarantee an `email_verified` claim.
+    if(typeof claims.email!=='string'||!claims.email.includes('@'))return null;
+    const jwk=(await accessKeys(teamDomain)).find(key=>keyId(key)===header.kid);
+    if(!jwk)return null;
+    const key=await crypto.subtle.importKey('jwk',jwk,{name:'RSASSA-PKCS1-v1_5',hash:'SHA-256'},false,['verify']);
+    const signature=decodeBase64url(parts[2]);
+    const valid=await crypto.subtle.verify('RSASSA-PKCS1-v1_5',key,signature as unknown as BufferSource,encoder.encode(`${parts[0]}.${parts[1]}`));
+    if(!valid)return null;
+    const email=claims.email.toLowerCase();
+    const owner=authOwner();
+    const userId=owner&&owner.email===email?owner.id:`access:${email}`;
+    return {userId,email,displayName:typeof claims.name==='string'&&claims.name?claims.name:email};
+  }catch{return null}
 }
 
 export function sessionSecret(): string {
@@ -109,9 +170,19 @@ function cookieValue(cookieHeader: string | null): string | undefined {
 }
 
 export async function currentIdentity(cookieHeader: string | null): Promise<Identity | null> {
-  // Hosted platform identity wins: it is injected by trusted dispatch headers.
+  // Cloudflare Access JWT is cryptographically verified before trusting claims.
+  const requestHeaders=await headers();
+  const assertion=requestHeaders.get('cf-access-jwt-assertion')||undefined;
+  const access=await accessIdentity(assertion);
+  if(access)return access;
+
+  // Hosted platform identity wins over the standalone password fallback.
   const hosted = await getChatGPTUser();
   if (hosted) return {userId:hosted.userId, email:hosted.email, displayName:hosted.displayName};
+
+  // Enable this only after the Access application, team domain and AUD are
+  // configured. Then missing/invalid Access JWTs never fall back to password.
+  if(setting('ACCESS_REQUIRED')==='1')return null;
 
   const owner = authOwner();
   if (!owner) return null;

@@ -154,6 +154,32 @@ for (const [label, uploaded] of [["documento", doc], ["comprovante", receipt]]) 
   check(`download do ${label}`, download.status === 200 && bytes.equals(PNG), `${bytes.length} bytes`);
 }
 
+// 6. Preview serves inline while download stays an attachment.
+for (const [label, uploaded] of [["documento", doc], ["comprovante", receipt]]) {
+  if (!uploaded.body.id) continue;
+  const inline = await fetch(`${base}/api/files?id=${uploaded.body.id}&disposition=inline`, { headers: auth });
+  const file = await fetch(`${base}/api/files?id=${uploaded.body.id}`, { headers: auth });
+  const inlineDisposition = (inline.headers.get("content-disposition") || "").split(";")[0];
+  const fileDisposition = (file.headers.get("content-disposition") || "").split(";")[0];
+  check(`prévia inline do ${label}`, inline.status === 200 && inlineDisposition === "inline", inlineDisposition);
+  check(`download do ${label} continua anexo`, fileDisposition === "attachment", fileDisposition);
+  check(
+    `prévia do ${label} sem cache`,
+    (inline.headers.get("cache-control") || "").includes("no-store") &&
+      inline.headers.get("x-content-type-options") === "nosniff",
+  );
+}
+
+// 7. Anonymous visitors cannot open the file or the preview.
+if (doc.body.id) {
+  const anonymous = await fetch(`${base}/api/files?id=${doc.body.id}&disposition=inline`, { redirect: "manual" });
+  check("prévia anônima recusada", anonymous.status === 401, `HTTP ${anonymous.status}`);
+}
+
+// 8. Preview is bound to the ledger: an unknown id is never served.
+const missing = await fetch(`${base}/api/files?id=arquivo-inexistente&disposition=inline`, { headers: auth });
+check("arquivo inexistente recusado", missing.status === 404, `HTTP ${missing.status}`);
+
 console.log(results.join("\n"));
 console.log(failures ? `\n${failures} verificação(ões) falharam.` : "\nAnexos validados.");
 process.exit(failures ? 1 : 0);

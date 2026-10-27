@@ -49,6 +49,9 @@ ${message ? `<p class="error">${message}</p>` : ''}
 
 export async function GET(){
   try{
+    if(secret('ACCESS_REQUIRED')==='1'){
+      return page(`<form><h1>Acesso via Cloudflare Access</h1><p>Entre pela política de acesso da organização para continuar.</p></form>`);
+    }
     if(!secret('APP_PASSWORD') || !authOwner()){
       return page(`<form><h1>Login não configurado</h1>
 <p>Defina os segredos APP_PASSWORD, AUTH_SECRET, AUTH_OWNER_EMAIL e AUTH_OWNER_ID no Worker.</p></form>`, 500);
@@ -62,9 +65,7 @@ export async function POST(req: Request){
     sameOrigin(req);
     const url = new URL(req.url);
     const secure = url.protocol === 'https:';
-    if(url.searchParams.get('acao') === 'sair'){
-      return new Response(null,{status:303,headers:{Location:'/api/session','Set-Cookie':clearedSessionCookie(secure)}});
-    }
+    if(url.searchParams.get('acao') === 'sair')return new Response(null,{status:303,headers:{Location:'/api/session','Set-Cookie':clearedSessionCookie(secure)}});
     const expected = secret('APP_PASSWORD');
     const owner = authOwner();
     if(!expected || !owner) throw new Error('Login não configurado. Defina APP_PASSWORD e o proprietário.');

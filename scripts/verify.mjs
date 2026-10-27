@@ -14,6 +14,7 @@ const tests = [
   "expense-payment-edit",
   "expense-plan-edit",
   "attachments",
+  "theme",
 ];
 
 let failed = 0;

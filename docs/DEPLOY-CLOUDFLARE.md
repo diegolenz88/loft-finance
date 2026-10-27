@@ -16,21 +16,45 @@ Como o Loft Finance roda fora da plataforma Sites: Worker + D1 + R2 na sua conta
 
 ## Autenticação
 
-O app aceita dois provedores de identidade, nesta ordem:
+O app aceita três provedores de identidade, nesta ordem:
 
-1. **Headers de plataforma** (`oai-authenticated-user-*`) — usado no Sites, sem alteração.
-2. **Cookie de sessão assinado** — usado quando não há headers. Implementado em `lib/identity.ts`.
+1. **Cloudflare Access** (JWT `Cf-Access-Jwt-Assertion` validado no servidor) — recomendado para vários sócios.
+2. **Headers de plataforma** (`oai-authenticated-user-*`) — usado no Sites, sem alteração.
+3. **Cookie de sessão assinado** — usado quando não há os anteriores.
 
-Sem identidade, a raiz redireciona para `/api/session` (tela de senha) e as APIs respondem `401`.
+Sem identidade, a raiz redireciona para `/api/session` e as APIs respondem `401`.
 
 Segredos necessários:
 
 | Nome | Função |
 | --- | --- |
 | `AUTH_SECRET` | chave HMAC do cookie (mínimo 32 caracteres) |
-| `APP_PASSWORD` | senha única de acesso |
+| `APP_PASSWORD` | senha única de acesso (modo provisório) |
 | `AUTH_OWNER_EMAIL` | e-mail do proprietário |
 | `AUTH_OWNER_ID` | vira `finance_project.owner` e concede papel admin |
+
+## Cloudflare Access (acesso individual)
+
+O Worker valida a assinatura RS256 do JWT, `iss` (team domain), `aud` (AUD da aplicação) e a expiração antes de confiar no e-mail. O e-mail validado é comparado com os participantes ativos do ledger: proprietário → `admin`; demais encontram o papel cadastrado (`admin`, `editor` ou `viewer`). E-mail não cadastrado recebe `403`.
+
+| Segredo | Valor |
+| --- | --- |
+| `ACCESS_TEAM_DOMAIN` | ex.: `minha-equipe.cloudflareaccess.com` |
+| `ACCESS_AUD` | Application Audience (AUD) Tag da aplicação no Zero Trust |
+| `ACCESS_REQUIRED` | `1` para exigir Access e desativar o fallback de senha |
+
+Passo a passo:
+
+1. No painel, **Zero Trust → Access controls → Applications**: crie uma aplicação self-hosted para o domínio do Worker.
+2. Em **Additional settings**, copie o **Application Audience (AUD) Tag**.
+3. Publique os segredos acima (`npx wrangler secret put ACCESS_TEAM_DOMAIN`, etc.).
+4. Cadastre o e-mail de cada sócio em **Configurações → Sócios e permissões**, com o papel desejado.
+5. Teste com `node scripts/access-smoke.mjs https://<worker>` antes de definir `ACCESS_REQUIRED=1`.
+6. Só então ative `ACCESS_REQUIRED=1` e remova `APP_PASSWORD` se não precisar mais dele.
+
+> Enquanto `ACCESS_REQUIRED` não for `1`, o login por senha continua funcionando como transição. Isso evita bloquear o proprietário antes da política do Access estar pronta.
+
+O botão **Encerrar sessão neste dispositivo** limpa apenas o cookie da aplicação. A sessão global do Cloudflare Access é gerenciada pelo próprio Access.
 
 > `AUTH_OWNER_ID` **não pode mudar** depois do primeiro cadastro, ou o acesso de administrador é perdido.
 
@@ -142,6 +166,8 @@ Comprovantes ficam no R2, não no D1. Se houver anexos, eles precisam ser copiad
 | `node scripts/prod-smoke.mjs <url>` | login e acesso autenticado em **produção** |
 | `node scripts/r2-smoke.mjs <url> full` | upload + download de comprovante (use `SEED=1` em base local vazia) |
 | `node scripts/r2-smoke.mjs <url> probe` | confirma que o binding R2 responde, sem gravar dados |
+| `node scripts/attachments-smoke.mjs <url>` | prévia inline, download e bloqueio anônimo dos comprovantes |
+| `node scripts/access-smoke.mjs <url>` | confirma que JWTs forjados do Access são rejeitados |
 | `node scripts/migrate-data.mjs` | copia o ledger local para o D1 de produção |
 | `node scripts/compare-data.mjs` | compara digests e totais entre local e produção |
 | `node scripts/dev-vars.mjs` | copia `.dev.vars` para `dist/server` (usado pelo `pnpm start`) |
