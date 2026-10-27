@@ -87,6 +87,40 @@ export function emptyLedger(c:Config):Ledger{validateConfig(c);return{config:wit
 // Pro-rates an amount across items by percentage, keeping every value an exact
 // integer of cents. Basis points make the split deterministic and reproducible.
 export function equalShares(items:string[]):Shares{ensure(items.length,'Informe os itens do rateio.');const n=items.length;const q=Math.floor(10000/n);const r=10000-q*n;return Object.fromEntries(items.map((x,i)=>[x,(q+(i<r?1:0))/100]))}
+// Splits the basis points of `total` equally across `items`.
+function splitBasisPoints(total:number,items:string[]):Shares{const n=items.length;const q=Math.floor(total/n);const r=total-q*n;return Object.fromEntries(items.map((x,i)=>[x,(q+(i<r?1:0))/100]))}
+// "Distribuir igualmente" must respect what the user picked: only the items that
+// already have a percentage are rebalanced. When nothing is selected the
+// suggested pool is used, never the full list, so units the user left out are
+// not added back silently.
+export function equalSelectedShares(items:string[],current:Shares={},suggested:string[]=items):Shares{
+ ensure(items.length,'Informe os itens do rateio.');
+ const chosen=items.filter(i=>Number(current[i])>0);
+ const pool=chosen.length?chosen:suggested.filter(i=>items.includes(i));
+ return equalShares(pool.length?pool:items);
+}
+// Same rule for the unit split of a lançamento. Units that must be preserved
+// (inactive ones already linked to the entry) keep their percentage, so the
+// remainder is what gets divided among the selected units.
+export function equalUnitShares(units:string[],current:Shares,preserved:string[]=[]):Shares{
+ ensure(units.length,'Informe os itens do rateio.');
+ const kept=preserved.filter(u=>Number(current[u])>0);
+ const keptTotal=Math.round(sum(kept.map(u=>Number(current[u])))*100);
+ const free=units.filter(u=>!preserved.includes(u));
+ const chosen=free.filter(u=>Number(current[u])>0);
+ const studios=free.filter(u=>u!=='Áreas comuns');
+ // A single unit holding the whole 100% is the untouched default of a new
+ // lançamento, not a selection: spreading the total is the intended action.
+ const untouched=chosen.length===1&&Math.round(Number(current[chosen[0]])*100)===10000;
+ const suggested=studios.length?studios:free;
+ const pool=untouched?suggested:(chosen.length?chosen:suggested);
+ ensure(pool.length,'Selecione ao menos uma unidade para distribuir.');
+ const remaining=10000-keptTotal;
+ ensure(remaining>0,`As unidades preservadas já somam 100%. Nada a distribuir.`);
+ const out:Shares=Object.fromEntries(units.map(u=>[u,0]));
+ for(const u of kept)out[u]=Number(current[u]);
+ return {...out,...splitBasisPoints(remaining,pool)};
+}
 export function budgetRateio(c:Config,stage:string,total:number,shares:Shares,replaceAll=false,description?:string):Config{ensure(c.stages.includes(stage),'Etapa inválida.');amount(total);validShares(shares,c.categories);ensure(description===undefined||(typeof description==='string'&&description.length<=300),'Descrição do orçamento muito longa.');const parts=allocate(total,shares);const config=structuredClone(c);const kept=replaceAll?[]:config.budgets.filter(b=>b.stage!==stage);config.budgets=kept.concat(c.categories.filter(x=>parts[x]>0).map(x=>({id:id(),category:x,stage,amount:parts[x],...(description?{description}:{})})));validateConfig(config);return config}
 // Distribution of the approved budget across units. Absent, it defaults to an
 // equal split; the project always has one unambiguous distribution.
