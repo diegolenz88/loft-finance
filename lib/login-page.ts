@@ -59,6 +59,7 @@ color:var(--muted);cursor:pointer}
 .tabs button[aria-selected=true]{background:var(--surface);color:var(--fg);box-shadow:0 1px 3px rgba(11,31,42,.12)}
 [hidden]{display:none!important}
 .error{margin:0;font-size:12.5px;color:var(--danger)}
+.hint{margin:0;font-size:11px;line-height:1.45;color:var(--muted)}
 .notice{margin:0;font-size:12.5px;color:var(--muted);padding:10px 12px;border-radius:9px;background:var(--chip)}
 .foot{justify-self:center;font-size:11.5px;color:var(--muted);text-align:center;line-height:1.5;margin:0}
 `;
@@ -69,6 +70,7 @@ function secretPanel({email, message, returnTo}: LoginOptions): string {
   return `<div class="field">
 <label for="email">E-mail</label>
 <input id="email" type="email" name="email" autocomplete="username" inputmode="email" required autofocus value="${escapeHtml(email ?? '')}">
+<small class="hint">Use exatamente o e-mail cadastrado no empreendimento.</small>
 </div>
 <div class="field">
 <label for="secret">Senha</label>

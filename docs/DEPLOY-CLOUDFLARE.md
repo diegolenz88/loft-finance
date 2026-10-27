@@ -101,6 +101,20 @@ imediatamente e os links pendentes continuam válidos por até 15 minutos.
 O e-mail do proprietário (`AUTH_OWNER_EMAIL`) continua entrando com a senha mestra
 `APP_PASSWORD`, que serve de recuperação caso alguma senha seja perdida.
 
+> **Atenção ao e-mail exato.** A senha mestra só funciona para o endereço em
+> `AUTH_OWNER_EMAIL`. Se você costuma usar outro e-mail (por exemplo, o pessoal),
+> crie um acesso para ele em **Configurações → Acessos ao sistema** — ou repita a
+> senha mestra ao criar esse acesso, e assim os dois endereços funcionam com a
+> mesma senha. Confira o endereço do proprietário no bloco "Proprietário" daquela
+> tela ou com:
+>
+> ```powershell
+> npx wrangler secret list --config dist/server/wrangler.json
+> ```
+>
+> O arquivo `.deploy-secrets.txt` é apenas uma cópia local: quem manda é o segredo
+> publicado no Worker. Se os dois divergirem, o login falha mesmo com a senha certa.
+
 Segredos necessários:
 
 | Nome | Função |
