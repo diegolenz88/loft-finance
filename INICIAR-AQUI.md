@@ -62,6 +62,30 @@ http://localhost:5173/signin-with-chatgpt?return_to=/
 Se o terminal indicar outra porta, use essa mesma porta no link. O modo de desenvolvimento
 local inclui a identidade de teste `Seedy` (`seedy@sites.test`). Esse mecanismo é
 restrito ao computador local e não integra a autenticação de produção.
+
+### Entrar com e-mail e senha no computador
+
+O formulário de login real também funciona localmente, usando o proprietário definido
+em `.dev.vars`:
+
+```text
+http://localhost:5173/api/session
+
+E-mail: diego_lenz@hotmail.com
+Senha:  o valor de APP_PASSWORD em .dev.vars
+```
+
+Para que o formulário apareça, saia da identidade de teste antes:
+
+```text
+http://localhost:5173/signout-with-chatgpt?return_to=/api/session
+```
+
+Sem esse passo o plugin de desenvolvimento injeta `seedy@sites.test` e o app entra
+direto. O `AUTH_OWNER_ID` em `.dev.vars` precisa continuar igual ao `owner` gravado
+na tabela `finance_project` do banco local (hoje `local_seedy`), ou o acesso perde a
+permissão de administrador.
+
 Depois de entrar, use “Configurar empreendimento” para cadastrar os dados locais.
 Não é necessário copiar cookies ou credenciais do site publicado.
 
