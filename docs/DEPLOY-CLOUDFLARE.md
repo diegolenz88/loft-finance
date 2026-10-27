@@ -54,8 +54,14 @@ pessoa informa o e-mail e recebe um endereço de uso único, válido por 15 minu
 | --- | --- |
 | Tabela | `finance_login_links` (guarda só o SHA-256 do token) |
 | Validade | 15 minutos, uso único, consumo atômico |
-| Quem recebe | proprietário e sócios ativos com e-mail cadastrado |
+| Vínculo | o token pertence ao e-mail que pediu o link ou para o qual ele foi gerado |
+| Quem recebe | proprietário, sócio ativo **ou** usuário sem vínculo com acesso ativo |
 | Resposta | sempre a mesma, para não revelar quem tem acesso |
+
+O vínculo é verificado duas vezes: ao **emitir** (não se cria token para e-mail sem
+acesso) e ao **abrir** (um acesso revogado invalida o link antes de gastar o token).
+Ao abrir o link, a sessão passa a ser sempre a do e-mail dono do link — se o
+navegador estava com outra conta, ele troca de usuário.
 
 Para o envio automático, escolha **um** provedor e informe a chave e o remetente.
 Todos usam apenas chamadas HTTPS, sem binding extra:

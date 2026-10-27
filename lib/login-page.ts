@@ -89,6 +89,7 @@ function magicPanel({email, message, returnTo, magicEnabled}: LoginOptions): str
 <div class="field">
 <label for="magic-email">E-mail</label>
 <input id="magic-email" type="email" name="email" autocomplete="email" inputmode="email" required value="${escapeHtml(email ?? '')}">
+<small class="hint">O link é pessoal e só funciona para este e-mail.</small>
 </div>
 ${message ? `<p class="error" role="alert">${escapeHtml(message)}</p>` : magicEnabled === false ? '<p class="notice" role="status">O envio automático ainda não está configurado. Peça um link ao administrador do empreendimento.</p>' : ''}
 <input type="hidden" name="return_to" value="${escapeHtml(returnTo ?? '/')}">

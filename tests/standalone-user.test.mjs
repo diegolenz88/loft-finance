@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {ROLES,isRole,normalizeEmail,conflictsWithPartner} from '../lib/access-roles.ts';
+import {ROLES,isRole,normalizeEmail,conflictsWithPartner,ledgerAllows} from '../lib/access-roles.ts';
 
 // Standalone users carry their own role, and only the three known roles are
 // accepted — the value ends up deciding write permission.
@@ -27,4 +27,33 @@ assert.equal(conflictsWithPartner(partners, 'DIEGO_LENZ@hotmail.com', 'editor'),
 assert.equal(conflictsWithPartner(partners, 'contadora@loft.app', 'editor'), false);
 assert.equal(conflictsWithPartner([], 'contadora@loft.app', 'root'), true);
 
-console.log('PASS: usuários sem sócio — papéis aceitos, normalização de e-mail e conflito com sócio existente.');
+// The magic link is only issued for an address that can actually sign in: the
+// owner, an active partner, or a standalone account (checked separately).
+const ledger = {
+  config: {
+    partners: [
+      {email: 'diego_lenz@hotmail.com', active: true},
+      {email: 'socio.inativo@loft.app', active: false},
+    ],
+  },
+};
+const OWNER = 'diego.lenz@h2oinnovation.com.py';
+
+assert.equal(ledgerAllows('diego.lenz@h2oinnovation.com.py', ledger, OWNER), OWNER);
+assert.equal(ledgerAllows('DIEGO.LENZ@H2OINNOVATION.COM.PY', ledger, OWNER), OWNER);
+assert.equal(ledgerAllows('diego_lenz@hotmail.com', ledger, OWNER), 'diego_lenz@hotmail.com');
+assert.equal(ledgerAllows('  DIEGO_LENZ@hotmail.com ', ledger, OWNER), 'diego_lenz@hotmail.com');
+
+// An inactive partner no longer receives a link, even if one was already sent.
+assert.equal(ledgerAllows('socio.inativo@loft.app', ledger, OWNER), null);
+assert.equal(ledgerAllows('desconhecido@loft.app', ledger, OWNER), null);
+assert.equal(ledgerAllows('', ledger, OWNER), null);
+assert.equal(ledgerAllows(null, ledger, OWNER), null);
+
+// Without a ledger (project not configured) only the owner passes; an owner email
+// that is not configured must never match an empty address.
+assert.equal(ledgerAllows('diego.lenz@h2oinnovation.com.py', null, OWNER), OWNER);
+assert.equal(ledgerAllows('qualquer@loft.app', null, OWNER), null);
+assert.equal(ledgerAllows('', null, ''), null);
+
+console.log('PASS: link mágico — só é emitido e aceito para o e-mail que tem acesso.');

@@ -16,3 +16,18 @@ export const normalizeEmail = (value: unknown) =>
 export function conflictsWithPartner(partnerEmails: string[], email: string, role: unknown): boolean {
   return partnerEmails.map(normalizeEmail).includes(normalizeEmail(email)) || !isRole(role);
 }
+
+type LedgerLike = {config?:{partners?:{active?:boolean;email?:string}[]}} | null | undefined;
+
+// Who may receive a magic link and sign in: the owner, an active partner, or a
+// standalone account (checked separately, because it lives in the credentials
+// table). Returns the normalised e-mail when it is allowed.
+export function ledgerAllows(email: unknown, ledger: LedgerLike, ownerEmail: unknown): string | null {
+  const target = normalizeEmail(email);
+  if (!target) return null;
+  if (normalizeEmail(ownerEmail) === target && normalizeEmail(ownerEmail)) return target;
+  const partner = (ledger?.config?.partners ?? []).find(
+    (p) => p?.active && normalizeEmail(p?.email) === target,
+  );
+  return partner ? target : null;
+}

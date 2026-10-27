@@ -51,7 +51,7 @@ export async function GET(req: Request){
     if(!email){
       return renderLogin({
         mode: 'magic',
-        message: 'Este link expirou ou já foi usado. Peça um novo.',
+        message: 'Este link expirou, já foi usado ou o acesso foi removido. Peça um novo.',
         magicEnabled: await mailerConfigured(),
       });
     }
