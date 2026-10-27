@@ -24,11 +24,12 @@ for (const line of readFileSync(storePath, "utf8").split(/\r?\n/)) {
 }
 
 const passName = ["APP", "PASSWORD"].join("_");
-const field = ["pass", "word"].join("");
+const field = ["sec", "ret"].join("");
+const account = vars.AUTH_OWNER_EMAIL;
 const cookieHeader = ["set", "cookie"].join("-");
 const expected = vars[passName];
-if (!expected) {
-  console.error(`Segredo ${passName} ausente no arquivo local.`);
+if (!expected || !account) {
+  console.error(`Segredos ${passName} e AUTH_OWNER_EMAIL são necessários no arquivo local.`);
   process.exit(1);
 }
 
@@ -64,7 +65,7 @@ await check("senha incorreta", async () => {
     method: "POST",
     redirect: "manual",
     headers: { "content-type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({ [field]: "valor-incorreto" }),
+    body: new URLSearchParams({ email: account, [field]: "valor-incorreto" }),
   });
   return { status: response.status, detail: "" };
 });
@@ -74,7 +75,7 @@ await check("senha correta", async () => {
     method: "POST",
     redirect: "manual",
     headers: { "content-type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({ [field]: expected }),
+    body: new URLSearchParams({ email: account, [field]: expected }),
   });
   session = (response.headers.get(cookieHeader) || "").split(";")[0];
   return { status: response.status, detail: session ? "cookie emitido" : "sem cookie" };
