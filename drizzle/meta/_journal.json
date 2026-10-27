@@ -15,6 +15,13 @@
       "when": 1793105766153,
       "tag": "0001_faulty_maelstrom",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1793107668560,
+      "tag": "0002_military_satana",
+      "breakpoints": true
     }
   ]
 }

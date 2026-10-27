@@ -45,6 +45,33 @@ As senhas são gravadas como hash PBKDF2-SHA256 com sal individual na tabela
 `finance_credentials` do D1, fora do ledger — portanto nunca trafegam para o
 navegador nem aparecem na API financeira.
 
+### Link mágico (entrar sem senha)
+
+A tela de entrada tem duas abas: **Senha** e **Link mágico**. No modo link, a
+pessoa informa o e-mail e recebe um endereço de uso único, válido por 15 minutos.
+
+| Item | Detalhe |
+| --- | --- |
+| Tabela | `finance_login_links` (guarda só o SHA-256 do token) |
+| Validade | 15 minutos, uso único, consumo atômico |
+| Quem recebe | proprietário e sócios ativos com e-mail cadastrado |
+| Resposta | sempre a mesma, para não revelar quem tem acesso |
+
+Para o envio automático, configure no Worker:
+
+| Segredo / variável | Função |
+| --- | --- |
+| `RESEND_API_KEY` | chave da API do Resend |
+| `MAGIC_LINK_FROM` | remetente verificado, ex. `Loft Finance <acesso@seudominio.com>` |
+
+Sem esses valores o envio fica desativado e a tela avisa para pedir o link ao
+administrador. O administrador pode gerar o link manualmente em
+**Configurações → Acessos ao sistema → Gerar link** (copiado para a área de
+transferência, válido por 15 minutos) e enviar por um canal seguro.
+
+Para remover o acesso de alguém, clique em **Remover**: as senhas param de valer
+imediatamente e os links pendentes continuam válidos por até 15 minutos.
+
 O e-mail do proprietário (`AUTH_OWNER_EMAIL`) continua entrando com a senha mestra
 `APP_PASSWORD`, que serve de recuperação caso alguma senha seja perdida.
 

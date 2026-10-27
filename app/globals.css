@@ -344,6 +344,15 @@ body:has(.print-doc) .main{padding-bottom:20px!important}
 .access-note svg{flex-shrink:0;margin-top:1px;color:var(--primary)}
 .access-note strong{display:block;font-size:12.5px;color:var(--foreground)}
 .access-note small{display:block;font-size:11.5px;line-height:1.5;margin-top:2px}
+.access-link{margin-top:12px;padding:12px 14px;border:1px solid #bfdcd8;border-radius:12px;background:#eef6f6;color:#244a48}
+.access-link strong{display:block;font-size:12.5px}
+.access-link small{display:block;font-size:11.5px;line-height:1.5;margin-top:2px;color:#4c626b}
+.access-link-row{display:flex;gap:8px;align-items:center;margin-top:9px}
+.access-link-row input{flex:1;min-width:0;font:inherit;font-size:11.5px;padding:9px 10px;border-radius:9px;border:1px solid #b8d8d3;background:#fff;color:#244a48}
+:root:not(.dark) .access-link{background:#eef6f6;border-color:#bfdcd8;color:#244a48}
+.dark .access-link{background:#182c31;border-color:#2c4750;color:#bfe4df}
+.dark .access-link small{color:#9dc0bb}
+.dark .access-link-row input{background:#0f1c22;border-color:#2c4750;color:#dcefee}
 @media (max-width:720px){
  .access-row{grid-template-columns:minmax(0,1fr) auto}
  .access-row .tag{justify-self:start}

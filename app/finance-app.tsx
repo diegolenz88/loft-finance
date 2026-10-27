@@ -154,6 +154,7 @@ function AccessManager({partners,admin}:{partners:Partner[];admin:boolean}){
  const [confirmation,setConfirmation]=useState('');
  const [busy,setBusy]=useState(false);
  const [feedback,setFeedback]=useState<{kind:'ok'|'err';text:string}|null>(null);
+ const [link,setLink]=useState<{email:string;url:string}|null>(null);
  async function refresh(){
   try{const j:any=await requestJson('/api/credentials');setData({accesses:Array.isArray(j.accesses)?j.accesses:[],owner:String(j.owner||'')})}
   catch{setData({accesses:[],owner:''})}
@@ -174,6 +175,16 @@ function AccessManager({partners,admin}:{partners:Partner[];admin:boolean}){
   }catch(e){reportApiError(e);setFeedback({kind:'err',text:e instanceof Error?e.message:'Não foi possível salvar o acesso.'})}
   finally{setBusy(false)}
  }
+ async function generateLink(email:string){
+  setBusy(true);setFeedback(null);
+  try{
+   const j:any=await requestJson('/api/credentials/link',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email})});
+   setLink({email,url:String(j.url||'')});
+   try{await navigator.clipboard.writeText(String(j.url||''));toast.success('Link copiado. Válido por 15 minutos.')}
+   catch{toast.info('Link gerado. Copie o endereço exibido.')}
+  }catch(e){reportApiError(e);setFeedback({kind:'err',text:e instanceof Error?e.message:'Não foi possível gerar o link.'})}
+  finally{setBusy(false)}
+ }
  async function revoke(email:string){
   setBusy(true);
   try{
@@ -184,7 +195,7 @@ function AccessManager({partners,admin}:{partners:Partner[];admin:boolean}){
   finally{setBusy(false)}
  }
  const withEmail=partners.filter(p=>p.email);
- return <section className="panel mt-6"><div className="panel-heading"><div><h2>Acessos ao sistema</h2><p>Cada sócio entra com o próprio e-mail e senha.</p></div></div>
+ return <section className="panel mt-6"><div className="panel-heading"><div><h2>Acessos ao sistema</h2><p>Cada sócio entra com e-mail e senha ou com um link enviado por e-mail.</p></div></div>
  {!admin&&<p className="footnote">Somente administradores criam ou removem acessos.</p>}
  {admin&&<>
   <div className="access-list">{withEmail.map(p=>{
@@ -196,6 +207,7 @@ function AccessManager({partners,admin}:{partners:Partner[];admin:boolean}){
     {!p.active&&<span className="tag warning">Sócio inativo</span>}
     <div className="access-actions">
      <button type="button" className="btn small secondary" disabled={busy||!p.active} onClick={()=>open?cancel():start(email)}>{open?'Cancelar':active?'Alterar senha':'Criar acesso'}</button>
+     <button type="button" className="btn small secondary" disabled={busy||!p.active} onClick={()=>generateLink(email)}>Gerar link</button>
      {active&&<button type="button" className="btn small secondary" disabled={busy} onClick={()=>revoke(email)}><Trash2 size={14}/>Remover</button>}
     </div>
     {open&&<div className="access-form">
@@ -207,6 +219,7 @@ function AccessManager({partners,admin}:{partners:Partner[];admin:boolean}){
    </div>
   })}</div>
   {!withEmail.length&&<p className="footnote">Cadastre o e-mail do sócio acima e salve as configurações para liberar o acesso.</p>}
+  {link&&<div className="access-link"><div><strong>Link de acesso gerado</strong><small>{link.email} · válido por 15 minutos e de uso único. Envie por um canal seguro.</small></div><div className="access-link-row"><input readOnly value={link.url} aria-label="Link de acesso" onFocus={e=>e.currentTarget.select()}/><button type="button" className="btn small secondary" onClick={()=>{navigator.clipboard.writeText(link.url).then(()=>toast.success('Link copiado.')).catch(()=>toast.info('Selecione e copie o endereço.'))}}>Copiar</button><button type="button" className="btn small secondary" onClick={()=>setLink(null)} aria-label="Fechar link"><X size={14}/></button></div></div>}
   <div className="access-note"><ShieldCheck size={16}/><div><strong>Proprietário</strong><small>{data?.owner||'—'} entra com a senha mestra do Worker (APP_PASSWORD). Ela continua valendo como recuperação caso alguma senha seja perdida.</small></div></div>
  </>}</section>
 }
