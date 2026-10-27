@@ -1,7 +1,8 @@
 export type Partner = {id:string;name:string;email:string;active:boolean;joined:string;role:'admin'|'editor'|'viewer'};
 export type Shares = Record<string,number>;
 export type Rule = {id:string;from:string;ownership:Shares;cost:Shares;revenue:Shares;base:'net'|'gross';reserve:number};
-export type Config = {name:string;currency:string;partners:Partner[];units:string[];inactiveUnits?:string[];categories:string[];stages:string[];accounts:string[];rules:Rule[];budgets:{id:string;category:string;stage:string;amount:number;description?:string}[];budgetUnits?:Shares};
+export type Profile = {name?:string;title?:string;photo?:string;updatedAt?:string};
+export type Config = {name:string;currency:string;partners:Partner[];units:string[];inactiveUnits?:string[];categories:string[];stages:string[];accounts:string[];rules:Rule[];budgets:{id:string;category:string;stage:string;amount:number;description?:string}[];budgetUnits?:Shares;profiles?:Record<string,Profile>};
 export type Entry = {id:string;kind:'expense'|'revenue';description:string;party:string;contactId?:string;budgetId?:string;plannedSource?:string;document:string;category:string;stage:string;units:Shares;amount:number;fees:number;due:string;date:string;note:string;planned:boolean;cancelled:boolean;shares:Shares;ruleId:string;base:'net'|'gross';reserve:number;exception:string;attachments:{id:string;name:string;kind?:'expense'|'payment';move?:string}[];paymentPlan?:{id:string;total:number;paidBefore?:number;downPayment:number;installments:number;position:number;kind:'downPayment'|'installment';funding?:string}};
 export type Movement = {id:string;type:string;date:string;amount:number;entry?:string;partner?:string;account?:string;to?:string;source?:string;origin?:string;fee?:number;reserve?:number;gross?:number;shares?:Shares;note:string;actor:string;at:string};
 export type Contact = {id:string;name:string;kind:'supplier'|'customer'|'both';document:string;email:string;phone:string;note:string;active:boolean;createdAt:string;updatedAt:string};
@@ -165,7 +166,26 @@ export function apply(s0:Ledger,action:any,actor:string,admin=true):Ledger{const
  if(contactId){const contact=s.contacts?.find(c=>c.id===contactId);ensure(contact,'Fornecedor/cliente não encontrado.');const retained=previous?.contactId===contactId;ensure(retained||contact!.active,'Este fornecedor/cliente está inativo.');ensure(retained||contact!.kind==='both'||contact!.kind===(a.kind==='expense'?'supplier':'customer'),'O cadastro não corresponde ao tipo de lançamento.');party=retained?previous!.party:contact!.name;}
  const entry:Entry={...a,budgetId:typeof a.budgetId==='string'&&a.budgetId?a.budgetId:undefined,plannedSource:validFundingSource(s,a.plannedSource),party,contactId,id:previous?.id||action.id,shares:chosen,ruleId:previous?.ruleId||r!.id,base:previous?.base||r!.base||'net',reserve:previous?.reserve??r!.reserve??0,attachments:previous?.attachments||[],paymentPlan:previous?.paymentPlan,cancelled:false};if(previous)s.entries[s.entries.indexOf(previous)]=entry;else s.entries.push(entry);description=(previous?'Edição: ':'Novo lançamento: ')+a.description;
  }else if(action.type==='cancel'){const e=s.entries.find(e=>e.id===a.entry);ensure(e&&paid(s,e)===0,'Estorne as baixas antes de cancelar.');ensure(a.note?.trim(),'Informe o motivo.');e!.cancelled=true;description='Cancelamento: '+e!.description+' — '+a.note;
- }else if(action.type==='config'){ensure(admin,'Apenas administradores alteram configurações.');validateConfig(a);ensure(s.config.partners.every(p=>a.partners.some((x:Partner)=>x.id===p.id)),'Inative sócios; não remova seu histórico.');ensure(s.config.accounts.every(x=>a.accounts.includes(x))&&s.config.units.every(x=>a.units.includes(x)),'Preserve contas e unidades existentes.');ensure(s.config.rules.every(r=>a.rules.some((x:Rule)=>JSON.stringify(x)===JSON.stringify(r))),'Regras anteriores são imutáveis; adicione uma nova vigência.');const before=inactiveUnits(s.config),after=inactiveUnits(a);const deactivated=after.filter(u=>!before.includes(u)),reactivated=before.filter(u=>!after.includes(u));s.config=withUnitActivity(a);description='Configurações e orçamento atualizados'+(deactivated.length?' · Unidades inativadas: '+deactivated.join(', '):'')+(reactivated.length?' · Unidades reativadas: '+reactivated.join(', '):'');
+ }else if(action.type==='profile'){
+  // Cada pessoa edita apenas o próprio perfil; a chave é o e-mail do login.
+  const p=action.data&&typeof action.data==='object'?action.data:{};
+  const email=String(actor||'').trim().toLowerCase();
+  ensure(/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email),'Entre com sua conta para editar o perfil.');
+  const clean=(value:unknown,max:number,label:string)=>{const text=typeof value==='string'?value.replace(/[\u0000-\u001f\u007f]/g,' ').trim():'';ensure(text.length<=max,label+' deve ter até '+max+' caracteres.');return text};
+  const profiles={...(s.config.profiles||{})};
+  const next={...(profiles[email]||{})};
+  if(Object.prototype.hasOwnProperty.call(p,'name'))next.name=clean(p.name,80,'O nome');
+  if(Object.prototype.hasOwnProperty.call(p,'title'))next.title=clean(p.title,60,'O cargo');
+  if(Object.prototype.hasOwnProperty.call(p,'photo')){
+   const photo=typeof p.photo==='string'?p.photo.trim():'';
+   ensure(!photo||/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(photo),'Foto do perfil inválida.');
+   if(photo)next.photo=photo;else delete next.photo;
+  }
+  if(!next.name&&!next.title&&!next.photo)delete profiles[email];
+  else profiles[email]={...next,updatedAt:new Date().toISOString()};
+  s.config.profiles=profiles;
+  description='Perfil atualizado'+(next.name?' · '+next.name:'');
+ }else if(action.type==='config'){ensure(admin,'Apenas administradores alteram configurações.');validateConfig(a);ensure(s.config.partners.every(p=>a.partners.some((x:Partner)=>x.id===p.id)),'Inative sócios; não remova seu histórico.');ensure(s.config.accounts.every(x=>a.accounts.includes(x))&&s.config.units.every(x=>a.units.includes(x)),'Preserve contas e unidades existentes.');ensure(s.config.rules.every(r=>a.rules.some((x:Rule)=>JSON.stringify(x)===JSON.stringify(r))),'Regras anteriores são imutáveis; adicione uma nova vigência.');const before=inactiveUnits(s.config),after=inactiveUnits(a);const deactivated=after.filter(u=>!before.includes(u)),reactivated=before.filter(u=>!after.includes(u));s.config=withUnitActivity({...a,profiles:s.config.profiles});description='Configurações e orçamento atualizados'+(deactivated.length?' · Unidades inativadas: '+deactivated.join(', '):'')+(reactivated.length?' · Unidades reativadas: '+reactivated.join(', '):'');
  }else if(action.type==='attachment'){const e=s.entries.find(e=>e.id===a.entry);ensure(e,'Lançamento não encontrado.');ensure(a.file?.id&&a.file?.name,'Arquivo inválido.');
   // A purchase keeps its own documents (invoice, quote) while each payment may
   // carry its own receipt. Both live on the entry but stay distinguishable.

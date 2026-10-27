@@ -83,6 +83,7 @@ node --experimental-strip-types tests/expense-payment-edit.test.mjs
 node --experimental-strip-types tests/expense-plan-edit.test.mjs
 node --experimental-strip-types tests/attachments.test.mjs
 node --experimental-strip-types tests/theme.test.mjs
+node --experimental-strip-types tests/profile.test.mjs
 pnpm exec tsc --noEmit
 ```
 
