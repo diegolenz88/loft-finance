@@ -24,11 +24,29 @@ O app aceita três provedores de identidade, nesta ordem:
 
 Sem identidade, a raiz redireciona para `/api/session` e as APIs respondem `401`.
 
-A tela de entrada fica em **`/api/session`** (é a única rota de login do Worker
-próprio). Ela aceita `?return_to=/caminho` para voltar ao ponto de origem depois
-do login, mostra `?saiu=1` após o logout e segue o tema claro/escuro do sistema.
+A tela de entrada fica em **`/api/session`** e pede **e-mail e senha**. Ela aceita
+`?return_to=/caminho` para voltar ao ponto de origem depois do login, mostra
+`?saiu=1` após o logout e segue o tema claro/escuro do sistema.
 `/signin-with-chatgpt` existe apenas no modo de desenvolvimento local (mock do
 plugin do Sites) e responde `404` aqui — por isso o app nunca redireciona para ela.
+
+### Criar acesso para outro sócio
+
+1. Em **Configurações → Sócios e permissões**, preencha o **e-mail de acesso** do
+   sócio, escolha a permissão e salve as configurações.
+2. Em **Configurações → Acessos ao sistema**, clique em **Criar acesso** na linha do
+   sócio e defina a senha (mínimo 8 caracteres, com letra e número).
+3. Envie o e-mail e a senha ao sócio. Ele entra em `/api/session` e recebe o papel
+   cadastrado (`Administrador`, `Editor` ou `Somente leitura`).
+4. Para revogar, clique em **Remover** na mesma tela; sessões já emitidas expiram em
+   até 30 dias ou ao sair.
+
+As senhas são gravadas como hash PBKDF2-SHA256 com sal individual na tabela
+`finance_credentials` do D1, fora do ledger — portanto nunca trafegam para o
+navegador nem aparecem na API financeira.
+
+O e-mail do proprietário (`AUTH_OWNER_EMAIL`) continua entrando com a senha mestra
+`APP_PASSWORD`, que serve de recuperação caso alguma senha seja perdida.
 
 Segredos necessários:
 

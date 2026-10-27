@@ -188,7 +188,13 @@ export async function currentIdentity(cookieHeader: string | null): Promise<Iden
   if (!owner) return null;
 
   const session = await readSessionToken(cookieValue(cookieHeader), sessionSecret());
-  if (!session || session.email !== owner.email) return null;
+  if (!session) return null;
 
-  return {userId:owner.id, email:owner.email, displayName:owner.email};
+  // Any signed session is accepted here; the authorization step decides the
+  // role. The owner keeps the configured id so the project row stays owned by
+  // the same user, while partners get a stable per-email id.
+  if (session.email === owner.email) {
+    return {userId:owner.id, email:owner.email, displayName:owner.email};
+  }
+  return {userId:`partner:${session.email}`, email:session.email, displayName:session.email};
 }

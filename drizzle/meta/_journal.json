@@ -8,6 +8,13 @@
       "when": 1791292508731,
       "tag": "0000_conscious_captain_cross",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1793105766153,
+      "tag": "0001_faulty_maelstrom",
+      "breakpoints": true
     }
   ]
 }
