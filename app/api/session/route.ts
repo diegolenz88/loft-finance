@@ -2,8 +2,7 @@ import {env} from 'cloudflare:workers';
 import {failure,sameOrigin} from '@/lib/server';
 import {authOwner,clearedSessionCookie,createSessionToken,sessionCookie,sessionSecret} from '@/lib/identity';
 import {checkAccess,normalizeEmail,sameSecret} from '@/lib/credentials';
-import {mailerConfigured} from '@/lib/mailer';
-import {renderLogin,renderNotice} from '@/lib/login-page';
+import {mailerConfigured} from '@/lib/mailer';import {renderLogin,renderNotice} from '@/lib/login-page';
 import {safeReturnTo} from '@/lib/redirects';
 
 export const dynamic = 'force-dynamic';
@@ -37,7 +36,7 @@ function registerFailure(key: string) {
   else attempts.set(key, {count: 1, until: Date.now() + WINDOW_MS});
 }
 
-const magicEnabled = () => mailerConfigured();
+const magicEnabled = async () => await mailerConfigured();
 
 export async function GET(req?: Request){
   try{
@@ -54,7 +53,7 @@ export async function GET(req?: Request){
       mode: url?.searchParams.get('modo') === 'link' ? 'magic' : 'secret',
       returnTo,
       notice,
-      magicEnabled: magicEnabled(),
+      magicEnabled: await magicEnabled(),
     });
   }catch(e){return failure(e)}
 }
@@ -77,7 +76,7 @@ export async function POST(req: Request){
 
     const who = email || 'sem-email';
     const wait = blocked(who);
-    if(wait) return renderLogin({email, returnTo, message:`Muitas tentativas. Aguarde ${wait} minuto(s) e tente novamente.`, magicEnabled: magicEnabled(), status: 429});
+    if(wait) return renderLogin({email, returnTo, message:`Muitas tentativas. Aguarde ${wait} minuto(s) e tente novamente.`, magicEnabled: await magicEnabled(), status: 429});
 
     // The owner keeps the Worker secret as a recovery path; every other partner
     // signs in with the credentials created in Configurações → Acessos.
@@ -86,7 +85,7 @@ export async function POST(req: Request){
 
     if(!ownerMatch && !partnerMatch){
       registerFailure(who);
-      return renderLogin({email, returnTo, message:'E-mail ou senha incorretos.', magicEnabled: magicEnabled(), status: 401});
+      return renderLogin({email, returnTo, message:'E-mail ou senha incorretos.', magicEnabled: await magicEnabled(), status: 401});
     }
 
     attempts.delete(who);

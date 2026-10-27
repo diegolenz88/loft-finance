@@ -348,6 +348,18 @@ body:has(.print-doc) .main{padding-bottom:20px!important}
 .access-note-warn svg{color:#8a5a10}
 .access-note-warn strong{color:#5f400c}
 .access-note-actions{margin-top:8px}
+/* Novo usuário e envio de e-mail */
+.access-new{margin-bottom:16px;padding:16px;border:1px solid var(--line);border-radius:12px;background:var(--surface-subtle)}
+.access-new-head{display:grid;gap:2px;margin-bottom:12px}
+.access-new-head strong{font-size:13.5px;color:var(--foreground)}
+.access-new-head small{font-size:11.5px;line-height:1.5;color:var(--text-secondary)}
+.access-new-actions{display:flex;gap:8px;margin-top:12px}
+.access-new .form-error,.access-new .positive-text{margin:10px 0 0;font-size:12px}
+.mail-current{display:flex;gap:10px;align-items:flex-start;padding:12px 14px;margin-bottom:14px;border:1px solid var(--line);border-radius:12px;background:var(--surface-raised)}
+.mail-current svg{flex-shrink:0;margin-top:1px;color:var(--primary)}
+.mail-current strong{display:block;font-size:13px;color:var(--foreground)}
+.mail-current small{display:block;font-size:11.5px;line-height:1.5;margin-top:2px;color:var(--text-secondary)}
+.mail-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
 .access-link{margin-top:12px;padding:12px 14px;border:1px solid #bfdcd8;border-radius:12px;background:#eef6f6;color:#244a48}
 .access-link strong{display:block;font-size:12.5px}
 .access-link small{display:block;font-size:11.5px;line-height:1.5;margin-top:2px;color:#4c626b}

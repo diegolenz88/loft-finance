@@ -60,22 +60,35 @@ pessoa informa o e-mail e recebe um endereço de uso único, válido por 15 minu
 Para o envio automático, escolha **um** provedor e informe a chave e o remetente.
 Todos usam apenas chamadas HTTPS, sem binding extra:
 
-| Provedor | Variável da chave | Observação |
-| --- | --- | --- |
-| Brevo | `BREVO_API_KEY` | Grátis 300/dia; basta verificar um e-mail remetente, sem domínio próprio |
-| Resend | `RESEND_API_KEY` | Grátis 3.000/mês; exige domínio verificado para enviar a terceiros |
-| MailerSend | `MAILERSEND_API_KEY` | Grátis 3.000/mês; exige domínio verificado |
-| Cloudflare Email Sending | binding `EMAIL` | Nativo, em beta; exige domínio na Cloudflare |
-
-Além da chave, defina o remetente:
-
-| Variável | Exemplo |
+| Provedor | Observação |
 | --- | --- |
-| `MAGIC_LINK_FROM` | `Loft Finance <acesso@seudominio.com>` |
-| `MAIL_PROVIDER` | opcional; força um provedor quando há mais de uma chave |
+| Brevo | Grátis 300/dia; basta verificar um e-mail remetente, sem domínio próprio |
+| Resend | Grátis 3.000/mês; exige domínio verificado para enviar a terceiros |
+| MailerSend | Grátis 3.000/mês; exige domínio verificado |
+| Cloudflare Email Sending | Somente por binding `EMAIL` + variável de ambiente (não aparece na tela) |
 
-O caminho mais rápido (o script valida, publica os segredos e guarda no arquivo
-local ignorado pelo Git):
+### Configurar pela interface (recomendado)
+
+1. Entre como administrador e abra **Configurações → Envio de e-mail**.
+2. Escolha o provedor, informe o remetente (ex.: `Loft Finance <acesso@dominio.com>`)
+   e cole a chave de API.
+3. Clique em **Salvar configuração** e depois em **Enviar e-mail de teste**.
+
+Os valores ficam na tabela `finance_settings` do D1, com a chave selada em
+AES-GCM usando uma derivação de `AUTH_SECRET`. A tela nunca devolve a chave: mostra
+apenas os quatro últimos caracteres. Como a chave é cifrada com `AUTH_SECRET`,
+rotacionar esse segredo invalida o valor salvo — basta cadastrá-lo de novo.
+
+> Se o Worker tiver `MAIL_PROVIDER` e `MAGIC_LINK_FROM` definidos como variáveis de
+> ambiente, eles têm precedência e a tela fica somente leitura. Remova esses
+> segredos para editar pela interface:
+>
+> ```powershell
+> npx wrangler secret delete MAIL_PROVIDER --config dist/server/wrangler.json
+> npx wrangler secret delete MAGIC_LINK_FROM --config dist/server/wrangler.json
+> ```
+
+### Configurar por variáveis de ambiente
 
 ```powershell
 $env:MAIL_PROVIDER = "brevo"
@@ -84,16 +97,33 @@ $env:MAGIC_LINK_FROM = "Loft Finance <acesso@seudominio.com>"
 node scripts/setup-email.mjs
 ```
 
-Depois do deploy, confirme em **Configurações → Acessos ao sistema**: o bloco
-"Envio de e-mail configurado" mostra o provedor e o remetente, e o botão
-**Enviar e-mail de teste** dispara uma mensagem real para o seu endereço. Se o
-provedor recusar a chave ou o remetente, a tela diz exatamente isso (chave
-recusada ou remetente não autorizado) em vez de falhar em silêncio.
+O script valida, publica os segredos e guarda uma cópia no arquivo local ignorado
+pelo Git.
 
-Sem nenhuma chave o envio fica desativado e a tela avisa para pedir o link ao
+Depois do deploy, confirme em **Configurações → Envio de e-mail**: o cartão mostra
+o provedor, o remetente e a dica da chave, e o botão **Enviar e-mail de teste**
+dispara uma mensagem real para o seu endereço. Se o provedor recusar a chave ou o
+remetente, a tela diz exatamente isso (chave recusada ou remetente não autorizado)
+em vez de falhar em silêncio.
+
+Sem nenhuma configuração o envio fica desativado e a tela avisa para pedir o link ao
 administrador. O administrador pode gerar o link manualmente em
 **Configurações → Acessos ao sistema → Gerar link** (copiado para a área de
 transferência, válido por 15 minutos) e enviar por um canal seguro.
+
+### Cadastrar um novo usuário pela interface
+
+Em **Configurações → Acessos ao sistema → Novo usuário**, informe nome, e-mail de
+acesso, permissão e senha. Em um passo só, o app:
+
+1. cria o sócio com a permissão escolhida;
+2. cria uma nova vigência de regras a partir da próxima data livre, com **0%** de
+   participação, custeio e receitas para o novo sócio (as vigências anteriores
+   permanecem intactas, pois o histórico é imutável);
+3. grava a credencial de login.
+
+Ajuste os percentuais em **Configurações → Regras de participação**. Sócios não
+podem ser excluídos, apenas inativados, para preservar o histórico.
 
 Para remover o acesso de alguém, clique em **Remover**: as senhas param de valer
 imediatamente e os links pendentes continuam válidos por até 15 minutos.

@@ -52,7 +52,7 @@ export async function GET(req: Request){
       return renderLogin({
         mode: 'magic',
         message: 'Este link expirou ou já foi usado. Peça um novo.',
-        magicEnabled: mailerConfigured(),
+        magicEnabled: await mailerConfigured(),
       });
     }
 
@@ -69,7 +69,7 @@ export async function POST(req: Request){
     const returnTo = safeReturnTo(String(data.get('return_to') || '/'));
     const typed = String(data.get('email') || '').trim().toLowerCase();
 
-    if(!mailerConfigured()){
+    if(!await mailerConfigured()){
       return renderLogin({
         mode: 'magic',
         email: typed,

@@ -2,7 +2,7 @@ import {access,failure,sameOrigin} from '@/lib/server';
 import {listAccessEmails,normalizeEmail,removeAccess,saveAccess} from '@/lib/credentials';
 import {secretProblem} from '@/lib/passwords';
 import {authOwner} from '@/lib/identity';
-import {mailerStatus} from '@/lib/mailer';
+import {currentMailStatus} from '@/lib/mailer';
 
 export const dynamic = 'force-dynamic';
 
@@ -26,7 +26,7 @@ export async function GET(){
       accesses: emails,
       partners: a.ledger?.config.partners.map((p) => ({id:p.id, name:p.name, email:normalizeEmail(p.email), role:p.role, active:p.active})) ?? [],
       owner: ownerEmail(a.user.email),
-      mail: mailerStatus(),
+      mail: await currentMailStatus(),
     }, {headers:{'Cache-Control':'no-store'}});
   }catch(e){return failure(e)}
 }

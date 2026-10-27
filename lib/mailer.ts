@@ -1,69 +1,54 @@
 // Outbound e-mail for the passwordless link.
 //
-// Four providers are supported through plain HTTPS calls, so any one of them can
-// be enabled by pasting a single key. `MAIL_PROVIDER` picks one explicitly; when
-// it is absent the first provider with a key configured wins. Without any key the
-// feature stays disabled and the screen says so, instead of pretending an e-mail
-// was sent.
+// The active provider comes from the Worker environment when present, otherwise
+// from the settings saved in the app. Both paths end in a plain HTTPS call, so a
+// key can be added from the interface without a redeploy.
 import {env} from 'cloudflare:workers';
-
-function setting(name: string): string | undefined {
-  const value = (env as unknown as Record<string, unknown>)[name];
-  return typeof value === 'string' && value.trim() ? value.trim() : undefined;
-}
-
-export type Provider = 'resend' | 'brevo' | 'mailersend' | 'cloudflare';
-
-export const mailerSender = (): string | undefined => setting('MAGIC_LINK_FROM') || setting('MAIL_FROM');
-export const mailerSenderName = (): string => setting('MAIL_FROM_NAME') || 'Loft Finance';
-
-function detectedProvider(): Provider | null {
-  const explicit = setting('MAIL_PROVIDER')?.toLowerCase();
-  if (explicit && ['resend', 'brevo', 'mailersend', 'cloudflare'].includes(explicit)) return explicit as Provider;
-  if (setting('RESEND_API_KEY')) return 'resend';
-  if (setting('BREVO_API_KEY')) return 'brevo';
-  if (setting('MAILERSEND_API_KEY')) return 'mailersend';
-  if ((env as unknown as {EMAIL?: unknown}).EMAIL) return 'cloudflare';
-  return null;
-}
-
-export const mailerProvider = (): Provider | null => detectedProvider();
-
-// The sender is required by every HTTP provider; Cloudflare also needs the
-// address to belong to an onboarded domain.
-export const mailerConfigured = (): boolean => Boolean(detectedProvider() && mailerSender());
-
-export function mailerStatus(): {configured: boolean; provider: Provider | null; sender: string | undefined; missing: string} {
-  const provider = detectedProvider();
-  const sender = mailerSender();
-  if (!provider) return {configured: false, provider, sender, missing: 'MAIL_PROVIDER ou uma chave de provedor'};
-  if (!sender) return {configured: false, provider, sender, missing: 'MAGIC_LINK_FROM'};
-  return {configured: true, provider, sender, missing: ''};
-}
+import {readMail} from './settings';
+import {
+  type EnvLike,
+  type MailConfig,
+  type MailStatus,
+  addressOf,
+  mailStatusOf,
+  resolveMail,
+} from './mail-config';
 
 type Message = {to: string; subject: string; text: string; html: string};
 
-// Accepts `Nome <email@dominio>` and splits it, because Brevo and MailerSend
-// expect the display name in a separate field.
+// `Nome <email@dominio>` is split because Brevo and MailerSend take the display
+// name in a separate field.
 function splitAddress(from: string): {email: string; name?: string} {
   const match = from.match(/^\s*(.*?)\s*<([^>]+)>\s*$/);
   if (match) return {name: match[1] || undefined, email: match[2].trim()};
   return {email: from.trim()};
 }
 
-async function sendResend(key: string, from: string, message: Message): Promise<Response> {
+export async function currentMail(): Promise<MailConfig | null> {
+  const stored = await readMail().catch(() => null);
+  return resolveMail(env as unknown as EnvLike, stored);
+}
+
+export async function currentMailStatus(): Promise<MailStatus> {
+  const stored = await readMail().catch(() => null);
+  return mailStatusOf(env as unknown as EnvLike, stored);
+}
+
+export const mailerConfigured = async (): Promise<boolean> => Boolean(await currentMail());
+
+async function sendResend(config: MailConfig, message: Message): Promise<Response> {
   return fetch('https://api.resend.com/emails', {
     method: 'POST',
-    headers: {authorization: `Bearer ${key}`, 'content-type': 'application/json'},
-    body: JSON.stringify({from, to: [message.to], subject: message.subject, text: message.text, html: message.html}),
+    headers: {authorization: `Bearer ${config.key}`, 'content-type': 'application/json'},
+    body: JSON.stringify({from: config.from, to: [message.to], subject: message.subject, text: message.text, html: message.html}),
   });
 }
 
-async function sendBrevo(key: string, from: string, message: Message): Promise<Response> {
-  const sender = splitAddress(from);
+async function sendBrevo(config: MailConfig, message: Message): Promise<Response> {
+  const sender = splitAddress(config.from);
   return fetch('https://api.brevo.com/v3/smtp/email', {
     method: 'POST',
-    headers: {'api-key': key, 'content-type': 'application/json', accept: 'application/json'},
+    headers: {'api-key': config.key, 'content-type': 'application/json', accept: 'application/json'},
     body: JSON.stringify({
       sender: {email: sender.email, ...(sender.name ? {name: sender.name} : {})},
       to: [{email: message.to}],
@@ -74,11 +59,11 @@ async function sendBrevo(key: string, from: string, message: Message): Promise<R
   });
 }
 
-async function sendMailerSend(key: string, from: string, message: Message): Promise<Response> {
-  const sender = splitAddress(from);
+async function sendMailerSend(config: MailConfig, message: Message): Promise<Response> {
+  const sender = splitAddress(config.from);
   return fetch('https://api.mailersend.com/v1/email', {
     method: 'POST',
-    headers: {authorization: `Bearer ${key}`, 'content-type': 'application/json'},
+    headers: {authorization: `Bearer ${config.key}`, 'content-type': 'application/json'},
     body: JSON.stringify({
       from: {email: sender.email, ...(sender.name ? {name: sender.name} : {})},
       to: [{email: message.to}],
@@ -89,12 +74,10 @@ async function sendMailerSend(key: string, from: string, message: Message): Prom
   });
 }
 
-// Cloudflare Email Sending binding: declared as `send_email` in the Worker and
-// bound to an onboarded domain.
-async function sendCloudflare(from: string, message: Message): Promise<boolean> {
-  const binding = (env as unknown as {EMAIL?: {send: (m: unknown) => Promise<unknown>}}).EMAIL;
+async function sendCloudflare(config: MailConfig, message: Message): Promise<void> {
+  const binding = (env as unknown as {EMAIL?: {send: (value: unknown) => Promise<unknown>}}).EMAIL;
   if (!binding?.send) throw new Error('Binding EMAIL ausente.');
-  const sender = splitAddress(from);
+  const sender = splitAddress(config.from);
   const raw = [
     `From: ${sender.name ? `${sender.name} <${sender.email}>` : sender.email}`,
     `To: ${message.to}`,
@@ -105,18 +88,12 @@ async function sendCloudflare(from: string, message: Message): Promise<boolean> 
     message.html,
   ].join('\r\n');
   await binding.send({from: sender.email, to: message.to, raw});
-  return true;
 }
 
 export type MailResult = {sent: boolean; reason?: string};
 
-export async function sendLoginLink(email: string, url: string, minutes: number): Promise<MailResult> {
-  const status = mailerStatus();
-  if (!status.configured || !status.provider || !status.sender) {
-    return {sent: false, reason: `Envio de e-mail não configurado no servidor (falta ${status.missing}).`};
-  }
-
-  const message: Message = {
+function messageFor(email: string, url: string, minutes: number): Message {
+  return {
     to: email,
     subject: 'Seu link de acesso ao Loft Finance',
     text: [
@@ -134,33 +111,36 @@ export async function sendLoginLink(email: string, url: string, minutes: number)
 <p style="font-size:13px;color:#586b73">O link vale por ${minutes} minutos e só pode ser usado uma vez.<br>Se você não pediu este acesso, ignore esta mensagem: nenhuma senha foi alterada.</p>
 </div>`,
   };
+}
 
+export async function sendLoginLink(email: string, url: string, minutes: number): Promise<MailResult> {
+  const status = await currentMailStatus();
+  const config = await currentMail();
+  if (!config) {
+    return {sent: false, reason: `Envio de e-mail não configurado no servidor (falta ${status.missing}).`};
+  }
+
+  const message = messageFor(email, url, minutes);
   try {
-    if (status.provider === 'cloudflare') {
-      await sendCloudflare(status.sender, message);
+    if (config.provider === 'cloudflare') {
+      await sendCloudflare(config, message);
       return {sent: true};
     }
 
-    const key =
-      status.provider === 'resend' ? setting('RESEND_API_KEY')
-      : status.provider === 'brevo' ? setting('BREVO_API_KEY')
-      : setting('MAILERSEND_API_KEY');
-    if (!key) return {sent: false, reason: 'Chave do provedor de e-mail ausente.'};
-
     const response =
-      status.provider === 'resend' ? await sendResend(key, status.sender, message)
-      : status.provider === 'brevo' ? await sendBrevo(key, status.sender, message)
-      : await sendMailerSend(key, status.sender, message);
+      config.provider === 'resend' ? await sendResend(config, message)
+      : config.provider === 'brevo' ? await sendBrevo(config, message)
+      : await sendMailerSend(config, message);
 
     if (!response.ok) {
       const detail = await response.text().catch(() => '');
-      console.error('Falha ao enviar o link de acesso', status.provider, response.status, detail.slice(0, 300));
-      // Provider errors are surfaced so the admin can fix the key/sender instead
-      // of hunting a silent failure.
+      console.error('Falha ao enviar o link de acesso', config.provider, response.status, detail.slice(0, 300));
+      // Provider errors are surfaced so the admin fixes the key or sender instead
+      // of chasing a silent failure.
       const hint = response.status === 401 || response.status === 403
         ? 'A chave do provedor de e-mail foi recusada.'
         : response.status === 422 || response.status === 400
-          ? 'O provedor recusou o remetente ou o destinatário.'
+          ? `O provedor recusou o remetente ${addressOf(config.from)} ou o destinatário.`
           : 'Não foi possível enviar o e-mail agora.';
       return {sent: false, reason: hint};
     }
@@ -169,4 +149,11 @@ export async function sendLoginLink(email: string, url: string, minutes: number)
     console.error('Erro ao enviar o link de acesso', error instanceof Error ? error.message : error);
     return {sent: false, reason: 'Não foi possível enviar o e-mail agora.'};
   }
+}
+
+// Sends a real message to the administrator so the setup can be proven before a
+// partner depends on it.
+export async function sendTestMail(to: string, link: string): Promise<MailResult> {
+  const result = await sendLoginLink(to, link, 15);
+  return result;
 }
