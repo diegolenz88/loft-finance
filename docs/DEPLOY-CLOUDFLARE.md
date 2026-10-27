@@ -140,6 +140,25 @@ acesso, permissão e senha. Em um passo só, o app:
 Ajuste os percentuais em **Configurações → Regras de participação**. Sócios não
 podem ser excluídos, apenas inativados, para preservar o histórico.
 
+### Rateio do orçamento por unidade
+
+Cada linha do orçamento (categoria + etapa) pode ter o seu próprio rateio entre
+unidades. Em **Orçamento**, use o ícone de rateio na linha desejada: o diálogo abre
+já apontando para ela, mostra o valor da linha e deixa claro que salvar ali não
+altera as outras linhas.
+
+- A linha com rateio próprio aparece marcada com **Rateio próprio** na coluna de
+  utilização e o cartão da unidade mostra o percentual efetivo (orçado ÷ orçamento).
+- **Usar o padrão** remove o rateio da linha, que volta a seguir o padrão do projeto.
+- O seletor **Rateio entre unidades → Aplicar o rateio em** permite escolher
+  “Todo o orçamento (padrão)” ou uma linha específica.
+- Linhas sem rateio próprio continuam seguindo o padrão do projeto, então os dados
+  já existentes não mudam de comportamento.
+
+As despesas têm rateio independente do orçamento: cada lançamento guarda a própria
+distribuição entre unidades no formulário de despesa/receita, e editar um
+lançamento nunca altera os demais.
+
 Desmarque **“Este usuário é sócio do empreendimento”** para criar alguém que
 apenas acessa o sistema (contador, assistente, auditor). Nesse caso:
 
