@@ -61,6 +61,7 @@ color:var(--muted);cursor:pointer}
 .error{margin:0;font-size:12.5px;color:var(--danger)}
 .hint{margin:0;font-size:11px;line-height:1.45;color:var(--muted)}
 .notice{margin:0;font-size:12.5px;color:var(--muted);padding:10px 12px;border-radius:9px;background:var(--chip)}
+.account{margin:0;font-size:14px;font-weight:600;color:var(--fg);padding:11px 13px;border-radius:10px;background:var(--chip);overflow-wrap:anywhere}
 .foot{justify-self:center;font-size:11.5px;color:var(--muted);text-align:center;line-height:1.5;margin:0}
 `;
 
@@ -96,8 +97,7 @@ ${message ? `<p class="error" role="alert">${escapeHtml(message)}</p>` : magicEn
 <button type="submit">Enviar link de acesso</button>`;
 }
 
-export function renderLogin(o: LoginOptions = {}): Response {
-  const mode: LoginMode = o.mode === 'magic' ? 'magic' : 'secret';
+export function renderLogin(o: LoginOptions = {}): Response {  const mode: LoginMode = o.mode === 'magic' ? 'magic' : 'secret';
   const magicEnabled = o.magicEnabled !== false;
   const panel = mode === 'magic' ? magicPanel(o) : secretPanel(o);
   const action = mode === 'magic' ? '/api/session/magic' : '/api/session';
@@ -127,6 +127,21 @@ ${tabsScript(magicEnabled)}`, o.status ?? 200);
 
 export function renderNotice(lead: string, title: string, status = 200): Response {
   return html(`${brand}<form><h1>${escapeHtml(title)}</h1><p class="lead">${escapeHtml(lead)}</p></form>`, status);
+}
+
+// The link page. It only confirms who the link belongs to and asks for a click:
+// the token is spent on the POST, so a messenger or antivirus that fetches the
+// URL cannot consume it before the person gets there.
+export function renderMagicConfirm(o: {email: string; token: string; returnTo?: string}): Response {
+  return html(`${brand}<form method="post" action="/api/session/magic">
+<h1>Entrar com link</h1>
+<p class="lead">Este link pertence a</p>
+<p class="account">${escapeHtml(o.email)}</p>
+<input type="hidden" name="token" value="${escapeHtml(o.token)}">
+<input type="hidden" name="return_to" value="${escapeHtml(o.returnTo ?? '/')}">
+<button type="submit">Entrar agora</button>
+</form>
+<p class="foot">O link vale por 15 minutos e só pode ser usado uma vez.<br>Se você não pediu este acesso, ignore esta página.</p>`, 200);
 }
 
 const tabsScript = (magicEnabled: boolean) => `<script>

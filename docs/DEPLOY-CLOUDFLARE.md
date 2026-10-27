@@ -63,6 +63,15 @@ acesso) e ao **abrir** (um acesso revogado invalida o link antes de gastar o tok
 Ao abrir o link, a sessão passa a ser sempre a do e-mail dono do link — se o
 navegador estava com outra conta, ele troca de usuário.
 
+Abrir o link é um fluxo de **duas etapas**: o `GET` só mostra uma página de
+confirmação ("Este link pertence a fulano@dominio") e o token é gasto no `POST` do
+botão **Entrar agora**. Isso é proposital: mensageiros, clientes de e-mail e
+antivírus buscam a URL automaticamente para gerar pré-visualização, e um `GET` que
+consumisse o token queimaria o link antes do clique.
+
+O e-mail autenticado aparece no rodapé do menu lateral e em **Meu perfil → E-mail
+desta sessão**, para confirmar com qual conta você entrou.
+
 Para o envio automático, escolha **um** provedor e informe a chave e o remetente.
 Todos usam apenas chamadas HTTPS, sem binding extra:
 

@@ -92,6 +92,23 @@ export async function createLink(email: string, ip?: string): Promise<{token: st
   return {token, expiresAt};
 }
 
+// Checks a token without spending it. The link page uses this to show who the
+// link belongs to and ask for a confirmation, because messengers and e-mail
+// scanners fetch URLs automatically — a GET that consumed the token would burn
+// the link before the person clicks.
+export async function peekLink(token: string | null | undefined): Promise<string | null> {
+  if (!token || token.length < 20 || token.length > 200) return null;
+  await ensureSchema();
+  const hash = await digest(token);
+  const now = new Date().toISOString();
+  const row = await db()
+    .prepare('SELECT email FROM finance_login_links WHERE token_hash = ? AND used_at IS NULL AND expires_at > ?')
+    .bind(hash, now)
+    .first<{email: string}>();
+  if (!row) return null;
+  return (await hasAccess(row.email)) ? normalizeEmail(row.email) : null;
+}
+
 // Returns the e-mail only when the token is still valid and unused. The UPDATE
 // runs with the same guards, so two simultaneous clicks cannot both succeed.
 // The access check happens before the token is spent, so an expired permission

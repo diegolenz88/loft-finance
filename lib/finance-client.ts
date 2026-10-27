@@ -1,6 +1,6 @@
 import type {Ledger,Profile} from './finance';
 
-export type FinanceSnapshot = {ledger:Ledger|null;version:number;role:string;profile?:Profile|null};
+export type FinanceSnapshot = {ledger:Ledger|null;version:number;role:string;profile?:Profile|null;user?:string};
 type Fetcher = typeof fetch;
 type Diagnostic = {path:string;method:string;status:number;format:string;requestId:string;reason:string};
 

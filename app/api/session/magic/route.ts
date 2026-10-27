@@ -1,8 +1,8 @@
 import {failure,sameOrigin} from '@/lib/server';
 import {createSessionToken,sessionCookie,sessionSecret} from '@/lib/identity';
 import {mailerConfigured,sendLoginLink} from '@/lib/mailer';
-import {LINK_TTL_MINUTES,authorizedEmail,consumeLink,createLink} from '@/lib/magic';
-import {renderLogin} from '@/lib/login-page';
+import {LINK_TTL_MINUTES,authorizedEmail,consumeLink,createLink,peekLink} from '@/lib/magic';
+import {renderLogin,renderMagicConfirm} from '@/lib/login-page';
 import {safeReturnTo} from '@/lib/redirects';
 
 export const dynamic = 'force-dynamic';
@@ -36,29 +36,33 @@ function linkUrl(req: Request, token: string, returnTo: string): string {
   return url.toString();
 }
 
-// GET consumes a token and signs the person in. A used, expired or forged token
-// lands on the form again with a neutral message — never on an error page.
+const expiredMessage = 'Este link expirou, já foi usado ou o acesso foi removido. Peça um novo.';
+
+// GET only inspects the token. Opening the link is a two-step flow because
+// messengers, e-mail clients and antivirus fetch URLs automatically: if the GET
+// consumed the token, the link would be spent before the person clicked it.
 export async function GET(req: Request){
   try{
     const url = new URL(req.url);
-    const secure = url.protocol === 'https:';
     const token = url.searchParams.get('token');
     if(!token){
       return Response.redirect(new URL('/api/session?modo=link', url).toString(), 303);
     }
 
-    const email = await consumeLink(token);
+    const email = await peekLink(token);
     if(!email){
       return renderLogin({
         mode: 'magic',
-        message: 'Este link expirou, já foi usado ou o acesso foi removido. Peça um novo.',
+        message: expiredMessage,
         magicEnabled: await mailerConfigured(),
       });
     }
 
-    const signed = await createSessionToken(email, sessionSecret());
-    const returnTo = safeReturnTo(url.searchParams.get('return_to'));
-    return new Response(null,{status:303,headers:{Location:returnTo, 'Set-Cookie':sessionCookie(signed, secure)}});
+    return renderMagicConfirm({
+      email,
+      token,
+      returnTo: safeReturnTo(url.searchParams.get('return_to')),
+    });
   }catch(e){return failure(e)}
 }
 
@@ -66,6 +70,25 @@ export async function POST(req: Request){
   try{
     sameOrigin(req);
     const data = await req.formData();
+
+    // Confirmation of an existing link: spend the token and sign in.
+    const token = String(data.get('token') || '');
+    if(token){
+      const email = await consumeLink(token);
+      if(!email){
+        return renderLogin({
+          mode: 'magic',
+          message: expiredMessage,
+          magicEnabled: await mailerConfigured(),
+        });
+      }
+      const signed = await createSessionToken(email, sessionSecret());
+      const secure = new URL(req.url).protocol === 'https:';
+      const returnTo = safeReturnTo(String(data.get('return_to') || '/'));
+      return new Response(null,{status:303,headers:{Location:returnTo, 'Set-Cookie':sessionCookie(signed, secure)}});
+    }
+
+    // Request a new link by e-mail.
     const returnTo = safeReturnTo(String(data.get('return_to') || '/'));
     const typed = String(data.get('email') || '').trim().toLowerCase();
 
@@ -88,8 +111,8 @@ export async function POST(req: Request){
     }
 
     register(email);
-    const {token} = await createLink(email);
-    const result = await sendLoginLink(email, linkUrl(req, token, returnTo), LINK_TTL_MINUTES);
+    const {token: issued} = await createLink(email);
+    const result = await sendLoginLink(email, linkUrl(req, issued, returnTo), LINK_TTL_MINUTES);
     if(!result.sent){
       return renderLogin({mode: 'magic', email: typed, returnTo, magicEnabled: true, message: result.reason ?? 'Não foi possível enviar o e-mail agora.'});
     }
