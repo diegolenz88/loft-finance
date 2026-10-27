@@ -39,7 +39,21 @@ export function AttachmentPreview({file,onClose}:{file:{id:string;name:string;mi
       return()=>{active=false;controller.abort();if(objectUrl){URL.revokeObjectURL(objectUrl);objectUrl=''}};
  },[file?.id]);
 
+ useEffect(()=>{
+  if(!file)return;
+  // Capture phase: the preview sits inside a Sheet, whose dismissable layer
+  // would otherwise consume Escape before this dialog reacts.
+  const onKey=(event:KeyboardEvent)=>{
+   if(event.key!=='Escape')return;
+   event.preventDefault();
+   event.stopPropagation();
+   onClose();
+  };
+  window.addEventListener('keydown',onKey,true);
+  return()=>window.removeEventListener('keydown',onKey,true);
+ },[!!file,onClose]);
+
  if(!file)return null;
  const image=mime.startsWith('image/');
- return <Dialog open onOpenChange={open=>{if(!open)onClose()}}><DialogContent className="attachment-preview-dialog" showCloseButton={false}><header className="attachment-preview-header"><div className="attachment-preview-heading"><FileText size={18}/><div><DialogTitle>{file.name}</DialogTitle><DialogDescription>{mime||'Comprovante protegido'}</DialogDescription></div></div><div className="attachment-preview-tools"><a className="attachment-preview-icon" href={fileUrl(file.id)} title="Baixar arquivo" aria-label="Baixar arquivo"><Download size={18}/></a>{url&&<a className="attachment-preview-icon" href={url} target="_blank" rel="noreferrer" title="Abrir em nova aba" aria-label="Abrir em nova aba"><ExternalLink size={18}/></a>}<button className="attachment-preview-icon" type="button" onClick={onClose} title="Fechar" aria-label="Fechar visualização"><X size={19}/></button></div></header><div className="attachment-preview-content">{busy&&<div className="attachment-preview-state"><LoaderCircle className="attachment-preview-spinner" size={24}/><span>Carregando arquivo…</span></div>}{error&&<div className="attachment-preview-state attachment-preview-error" role="alert">{error}</div>}{!busy&&!error&&url&&image&&<img className="attachment-preview-image" src={url} alt={file.name}/ >}{!busy&&!error&&url&&mime==='application/pdf'&&<iframe className="attachment-preview-frame" src={url} title={file.name}/>}</div><footer className="attachment-preview-footer"><span>Visualização privada · acesso autenticado</span><a className="btn secondary" href={fileUrl(file.id)}><Download size={16}/>Baixar</a></footer></DialogContent></Dialog>;
+ return <Dialog open onOpenChange={open=>{if(!open)onClose()}}><DialogContent className="attachment-preview-dialog" showCloseButton={false} onKeyDown={event=>{if(event.key==='Escape'){event.preventDefault();event.stopPropagation();onClose()}}}><header className="attachment-preview-header"><div className="attachment-preview-heading"><FileText size={18}/><div><DialogTitle>{file.name}</DialogTitle><DialogDescription>{mime||'Comprovante protegido'}</DialogDescription></div></div><div className="attachment-preview-tools"><a className="attachment-preview-icon" href={fileUrl(file.id)} title="Baixar arquivo" aria-label="Baixar arquivo"><Download size={18}/></a>{url&&<a className="attachment-preview-icon" href={url} target="_blank" rel="noreferrer" title="Abrir em nova aba" aria-label="Abrir em nova aba"><ExternalLink size={18}/></a>}<button className="attachment-preview-icon" type="button" onClick={onClose} title="Fechar" aria-label="Fechar visualização"><X size={19}/></button></div></header><div className="attachment-preview-content">{busy&&<div className="attachment-preview-state"><LoaderCircle className="attachment-preview-spinner" size={24}/><span>Carregando arquivo…</span></div>}{error&&<div className="attachment-preview-state attachment-preview-error" role="alert">{error}</div>}{!busy&&!error&&url&&image&&<img className="attachment-preview-image" src={url} alt={file.name}/ >}{!busy&&!error&&url&&mime==='application/pdf'&&<iframe className="attachment-preview-frame" src={url} title={file.name}/>}</div><footer className="attachment-preview-footer"><span>Visualização privada · acesso autenticado</span><a className="btn secondary" href={fileUrl(file.id)}><Download size={16}/>Baixar</a></footer></DialogContent></Dialog>;
 }
