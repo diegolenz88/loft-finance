@@ -24,6 +24,12 @@ O app aceita três provedores de identidade, nesta ordem:
 
 Sem identidade, a raiz redireciona para `/api/session` e as APIs respondem `401`.
 
+A tela de entrada fica em **`/api/session`** (é a única rota de login do Worker
+próprio). Ela aceita `?return_to=/caminho` para voltar ao ponto de origem depois
+do login, mostra `?saiu=1` após o logout e segue o tema claro/escuro do sistema.
+`/signin-with-chatgpt` existe apenas no modo de desenvolvimento local (mock do
+plugin do Sites) e responde `404` aqui — por isso o app nunca redireciona para ela.
+
 Segredos necessários:
 
 | Nome | Função |
