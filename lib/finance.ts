@@ -131,9 +131,18 @@ export function budgetRateio(c:Config,stage:string,total:number,shares:Shares,re
 export const unitBudgetShares=(c:Config):Shares=>c.budgetUnits??equalShares(c.units);
 // A lançamento may be tied to one concrete budget line. Without the link (or
 // when that line no longer exists) the category/stage pair keeps the previous
-// behavior, so old data and removals stay compatible.
+// behavior, so old data and removals stay compatible. When the same category and
+// stage have more than one line, the pair alone is ambiguous: the entry then only
+// matches a line if it also shares the description, otherwise it is reported as
+// unlinked instead of being folded into an arbitrary line.
 export const entryBudget=(c:Config,e:{budgetId?:string})=>e.budgetId?c.budgets.find(b=>b.id===e.budgetId):undefined;
-export const entryBudgetLine=(c:Config,e:{budgetId?:string;category:string;stage:string})=>entryBudget(c,e)??c.budgets.find(b=>b.category===e.category&&b.stage===e.stage);
+export function entryBudgetLine(c:Config,e:{budgetId?:string;category:string;stage:string;description?:string}){
+ const linked=entryBudget(c,e);if(linked)return linked;
+ const same=c.budgets.filter(b=>b.category===e.category&&b.stage===e.stage);
+ if(same.length===1)return same[0];
+ const byDescription=e.description?same.find(b=>b.description&&b.description.trim()===e.description!.trim()):undefined;
+ return byDescription;
+}
 // A planned funding source records which resource is expected to settle an
 // expense: the project's own cash, a partner's contribution lot, a direct
 // payment, or revenue kept in custody. It never moves money by itself; the
@@ -161,8 +170,101 @@ export function budgetByUnit(c:Config):Record<string,number>{
 // Edits one budget line. A zero value removes the line, so clearing a lançamento
 // never leaves a R$ 0,00 row behind; the description is replaced as a whole.
 export function budgetSet(c:Config,category:string,stage:string,value:number,description?:string):Config{ensure(c.categories.includes(category)&&c.stages.includes(stage),'Categoria ou etapa inválida.');ensure(Number.isSafeInteger(value)&&value>=0,'Informe um valor válido em reais e centavos.');ensure(description===undefined||(typeof description==='string'&&description.length<=300),'Descrição do orçamento muito longa.');const config=structuredClone(c);const existing=config.budgets.find(b=>b.category===category&&b.stage===stage);if(value===0){ensure(existing,'Não há orçamento para remover nesta categoria e etapa.');config.budgets=config.budgets.filter(b=>b!==existing)}else if(existing){existing.amount=value;existing.description=description||undefined}else config.budgets.push({id:id(),category,stage,amount:value,...(description?{description}:{})});validateConfig(config);return config}
+// Edits one specific line, identified by id. Without an id a NEW line is created
+// even when the same category and stage already exist — that is what allows two
+// items of the same category and stage to coexist, told apart by the description.
+// Passing `amount: 0` on an existing line removes it.
+export function budgetSetLine(c:Config,line:{id?:string;category:string;stage:string;amount:number;description?:string}):Config{
+ ensure(c.categories.includes(line.category)&&c.stages.includes(line.stage),'Categoria ou etapa inválida.');
+ ensure(Number.isSafeInteger(line.amount)&&line.amount>=0,'Informe um valor válido em reais e centavos.');
+ ensure(line.description===undefined||(typeof line.description==='string'&&line.description.length<=300),'Descrição do orçamento muito longa.');
+ const config=structuredClone(c);
+ const existing=line.id?config.budgets.find(b=>b.id===line.id):undefined;
+ if(line.id)ensure(existing,'Linha do orçamento não encontrada.');
+ if(existing&&line.amount===0){
+  config.budgets=config.budgets.filter(b=>b.id!==existing.id);
+  validateConfig(config);
+  return config;
+ }
+ if(existing){
+  // Keeps the per-unit split and the id, so lançamentos linked to this line stay
+  // linked after an amount or description change.
+  existing.amount=line.amount;
+  existing.description=line.description||undefined;
+ }else{
+  config.budgets.push({id:id(),category:line.category,stage:line.stage,amount:line.amount,...(line.description?{description:line.description}:{})});
+ }
+ validateConfig(config);
+ return config;
+}
+export function budgetRemoveLine(c:Config,budgetId:string):Config{
+ ensure(typeof budgetId==='string'&&budgetId,'Selecione a linha do orçamento.');
+ const config=structuredClone(c);
+ const before=config.budgets.length;
+ config.budgets=config.budgets.filter(b=>b.id!==budgetId);
+ ensure(config.budgets.length<before,'Linha do orçamento não encontrada.');
+ validateConfig(config);
+ return config;
+}
 export function budgetRemove(c:Config,category:string,stage:string):Config{ensure(c.categories.includes(category)&&c.stages.includes(stage),'Categoria ou etapa inválida.');const config=structuredClone(c);const before=config.budgets.length;config.budgets=config.budgets.filter(b=>!(b.category===category&&b.stage===stage));ensure(config.budgets.length<before,'Não há orçamento para remover nesta categoria e etapa.');validateConfig(config);return config}
 export function budgetUnitRateio(c:Config,shares:Shares):Config{validShares(shares,c.units);const config=structuredClone(c);config.budgetUnits={...shares};validateConfig(config);return config}
+// Budget rows for the screen. One row per line, so two items of the same category
+// and stage appear separately. Expenses linked to a line are counted there;
+// expenses without a link are grouped in an extra row so money never disappears
+// from the table — that is also where a line deleted after the fact lands.
+export type BudgetRow = {
+ key:string;
+ lineId?:string;
+ category:string;
+ stage:string;
+ description?:string;
+ budget:number;
+ units?:Shares;
+ entries:Entry[];
+ contracted:number;
+ paid:number;
+};
+export function budgetRows(s:Ledger):BudgetRow[]{
+ const expenses=s.entries.filter(e=>e.kind==='expense'&&!e.cancelled&&!e.planned);
+ const rows:BudgetRow[]=s.config.budgets.map(b=>{
+  // Resolving through entryBudgetLine also attaches entries that have no explicit
+  // budgetId but whose category+stage points unambiguously to this line, which is
+  // the historical behaviour.
+  const entries=expenses.filter(e=>entryBudgetLine(s.config,e)?.id===b.id);
+  return {
+   key:b.id,
+   lineId:b.id,
+   category:b.category,
+   stage:b.stage,
+   description:b.description,
+   budget:b.amount,
+   units:b.units,
+   entries,
+   contracted:sum(entries.map(e=>e.amount)),
+   paid:sum(entries.map(e=>paid(s,e))),
+  };
+ });
+ // Expenses that resolve to no line: keep them visible, grouped by category+stage.
+ const leftovers=new Map<string,Entry[]>();
+ for(const e of expenses){
+  if(entryBudgetLine(s.config,e))continue;
+  const key=`${e.category}|${e.stage}`;
+  leftovers.set(key,[...(leftovers.get(key)??[]),e]);
+ }
+ for(const [key,entries] of leftovers){
+  const [category,stage]=key.split('|');
+  rows.push({
+   key:`unlinked:${key}`,
+   category,
+   stage,
+   budget:0,
+   entries,
+   contracted:sum(entries.map(e=>e.amount)),
+   paid:sum(entries.map(e=>paid(s,e))),
+  });
+ }
+ return rows;
+}
 // Unit split of one budget line. `shares === null` clears it, so the line goes
 // back to the project default; other lines are never touched.
 export function budgetLineRateio(c:Config,budgetId:string,shares:Shares|null):Config{

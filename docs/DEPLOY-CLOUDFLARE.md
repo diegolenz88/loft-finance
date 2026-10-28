@@ -147,6 +147,29 @@ unidades. Em **Orçamento**, use o ícone de rateio na linha desejada: o diálog
 já apontando para ela, mostra o valor da linha e deixa claro que salvar ali não
 altera as outras linhas.
 
+### Vários itens na mesma categoria e etapa
+
+O orçamento é uma lista de **itens**. Em **Orçamento → Definir orçamento (Item
+único)** o campo **Item / descrição** vem primeiro, e cada salvamento cria um item
+novo — então é possível ter, por exemplo, “Portas de correr” e “Janelas” ambos em
+Mobiliário · Instalações, cada um com o seu valor, o seu rateio por unidade e os
+seus lançamentos.
+
+- A tabela mostra **uma linha por item**, com a descrição na primeira coluna.
+- Editar um item altera só ele; **Remover item** apaga apenas aquele item.
+- O seletor **Orçamento vinculado** do lançamento lista os itens como
+  `descrição · categoria · etapa · valor`.
+- Despesas cuja categoria e etapa apontam para mais de um item e que não têm
+  vínculo explícito aparecem em uma linha **Sem orçamento vinculado**, em vez de
+  serem somadas a um item qualquer. Quando existe apenas um item para a
+  combinação, o comportamento anterior é mantido.
+- O alvo padrão do rateio (“Todo o orçamento”) continua valendo para itens sem
+  rateio próprio.
+
+As despesas têm rateio independente do orçamento: cada lançamento guarda a própria
+distribuição entre unidades no formulário de despesa/receita, e editar um
+lançamento nunca altera os demais.
+
 - A linha com rateio próprio aparece marcada com **Rateio próprio** na coluna de
   utilização e o cartão da unidade mostra o percentual efetivo (orçado ÷ orçamento).
 - **Usar o padrão** remove o rateio da linha, que volta a seguir o padrão do projeto.
